@@ -1,13 +1,22 @@
-use std::rc::Rc;
+use std::{
+  ptr::null_mut,
+  rc::Rc,
+  cell::RefCell,
+};
 
 use anyhow::Result;
 
-use hala_imgui::Application;
+use easy_imgui_sys::*;
+
+use hala_imgui::{
+  HalaApplication,
+  HalaImGui,
+};
 
 /// The hello world renderer.
 struct HelloWorldRenderer {
-  pub context: std::mem::ManuallyDrop<hala_gfx::HalaContext>,
-  pub graphics_command_buffers: std::mem::ManuallyDrop<hala_gfx::HalaCommandBufferSet>,
+  context: std::mem::ManuallyDrop<Rc<RefCell<hala_gfx::HalaContext>>>,
+  graphics_command_buffers: std::mem::ManuallyDrop<hala_gfx::HalaCommandBufferSet>,
 
   image_index: usize,
 }
@@ -43,9 +52,10 @@ impl HelloWorldRenderer {
       "main_graphics.cmdbuf",
     )?;
 
+    log::debug!("Hello World renderer created.");
     Ok(
       Self {
-        context: std::mem::ManuallyDrop::new(context),
+        context: std::mem::ManuallyDrop::new(Rc::new(RefCell::new(context))),
         graphics_command_buffers: std::mem::ManuallyDrop::new(graphics_command_buffers),
 
         image_index: 0,
@@ -56,7 +66,7 @@ impl HelloWorldRenderer {
   /// Wait the renderer idle.
   /// return: The result.
   pub fn wait_idle(&self) -> Result<()> {
-    self.context.logical_device.borrow().wait_idle()?;
+    self.context.borrow().logical_device.borrow().wait_idle()?;
 
     Ok(())
   }
@@ -65,8 +75,8 @@ impl HelloWorldRenderer {
   /// param delta_time: The delta time.
   /// return: The result.
   pub fn update(&mut self, _delta_time: f64) -> Result<()> {
-    self.image_index = self.context.prepare_frame()?;
-    self.context.record_graphics_command_buffer(
+    self.image_index = self.context.borrow().prepare_frame()?;
+    self.context.borrow().record_graphics_command_buffer(
       self.image_index, &self.graphics_command_buffers,
       Some(([25.0 / 255.0, 118.0 / 255.0, 210.0 / 255.0, 1.0], 1.0, 0)),
       |_index, _command_buffers| {
@@ -81,7 +91,7 @@ impl HelloWorldRenderer {
   /// Rendering.
   /// return: The result.
   pub fn render(&mut self) -> Result<()> {
-    self.context.submit_and_present_frame(
+    self.context.borrow_mut().submit_and_present_frame(
       self.image_index, &self.graphics_command_buffers
     )?;
 
@@ -92,11 +102,12 @@ impl HelloWorldRenderer {
 
 /// The hello world application.
 struct HelloWorldApp {
-  renderer: Option<HelloWorldRenderer>
+  renderer: Option<HelloWorldRenderer>,
+  imgui: Option<hala_imgui::HalaImGui>,
 }
 
 /// The implementation of the application trait for the hello world application.
-impl Application for HelloWorldApp {
+impl HalaApplication for HelloWorldApp {
 
   fn get_log_console_fmt(&self) -> &str {
     "{d(%H:%M:%S)} {h({l:<5})} {t:<20.20} - {m}{n}"
@@ -132,22 +143,30 @@ impl Application for HelloWorldApp {
       require_depth: true,
       ..Default::default()
     };
-    self.renderer = Some(HelloWorldRenderer::new(
+    let renderer = HelloWorldRenderer::new(
       self.get_window_title(),
       &gpu_req,
       window
+    )?;
+    self.imgui = Some(HalaImGui::new(
+      Rc::clone(&(*renderer.context))
     )?);
+    self.renderer = Some(renderer);
 
     Ok(())
   }
 
   fn after_run(&mut self) {
+    self.imgui = None;
     if let Some(renderer) = self.renderer.take() {
       renderer.wait_idle().expect("Failed to wait the renderer idle.");
     }
   }
 
-  fn update(&mut self, delta_time: f64, _width: u32, _height: u32) -> Result<()> {
+  fn update(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()> {
+    if let Some(imgui) = &mut self.imgui {
+      imgui.new_frame(delta_time, width, height)?;
+    }
     if let Some(renderer) = &mut self.renderer {
       renderer.update(delta_time)?;
     }
@@ -155,7 +174,24 @@ impl Application for HelloWorldApp {
     Ok(())
   }
 
+  fn ui(&mut self) {
+    unsafe {
+      ImGui_Begin(
+        "Hello, World!".as_ptr() as *const i8,
+        null_mut(),
+        ImGuiWindowFlags_::ImGuiWindowFlags_None.0
+      );
+
+      ImGui_Text("Hello, World!".as_ptr() as *const i8);
+
+      ImGui_End();
+    }
+  }
+
   fn render(&mut self) -> Result<()> {
+    if let Some(imgui) = self.imgui.as_ref() {
+      imgui.render()?;
+    }
     if let Some(renderer) = &mut self.renderer {
       renderer.render()?;
     }
@@ -171,7 +207,8 @@ impl HelloWorldApp {
   /// Create a new hello world application.
   pub fn new() -> Self {
     Self {
-      renderer: None
+      renderer: None,
+      imgui: None,
     }
   }
 

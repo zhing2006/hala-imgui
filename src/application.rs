@@ -14,7 +14,7 @@ use winit::{
 };
 
 /// The application trait.
-pub trait Application {
+pub trait HalaApplication {
 
   /// Get the file log format string.
   /// return: The format string.
@@ -53,6 +53,8 @@ pub trait Application {
   /// param height: The height of the window.
   /// return: The result.
   fn update(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()>;
+  /// The UI function.
+  fn ui(&mut self) {}
   /// The render function.
   /// return: The result.
   fn render(&mut self) -> Result<()>;
