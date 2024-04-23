@@ -1,0 +1,31 @@
+[package]
+name = "hala-imgui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hello_world"
+test = false
+bench = false
+
+[dependencies]
+hala-gfx = {path = "../hala-gfx"}
+anyhow = {version = "1", default-features = false, features = ["backtrace", "std"]}
+thiserror = {version = "1",  default-features = false}
+log = {version = "0", default-features = false}
+winit = {version = "0.29", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"]}
+easy-imgui-sys = {version = "0", default-features = false}
+log4rs = {version = "1", default-features = false, features = [
+    "gzip",
+    "console_appender",
+    "rolling_file_appender",
+    "compound_policy",
+    "fixed_window_roller",
+    "size_trigger",
+    "pattern_encoder"
+]}
+
+[dependencies.image]
+version = "0.24"
+default-features = false
+features = ["jpeg", "png", "pnm", "tga", "hdr", "exr"]
