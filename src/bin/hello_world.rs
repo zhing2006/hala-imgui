@@ -164,35 +164,23 @@ impl HalaApplication for HelloWorldApp {
   }
 
   fn update(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()> {
-    if let Some(imgui) = &mut self.imgui {
+    if let Some(imgui) = self.imgui.as_mut() {
       imgui.new_frame(delta_time, width, height)?;
     }
-    if let Some(renderer) = &mut self.renderer {
+    self.ui();
+    if let Some(imgui) = self.imgui.as_mut() {
+      imgui.render()?;
+    }
+
+    if let Some(renderer) = self.renderer.as_mut() {
       renderer.update(delta_time)?;
     }
 
     Ok(())
   }
 
-  fn ui(&mut self) {
-    unsafe {
-      ImGui_Begin(
-        "Hello, World!".as_ptr() as *const i8,
-        null_mut(),
-        ImGuiWindowFlags_::ImGuiWindowFlags_None.0
-      );
-
-      ImGui_Text("Hello, World!".as_ptr() as *const i8);
-
-      ImGui_End();
-    }
-  }
-
   fn render(&mut self) -> Result<()> {
-    if let Some(imgui) = self.imgui.as_ref() {
-      imgui.render()?;
-    }
-    if let Some(renderer) = &mut self.renderer {
+    if let Some(renderer) = self.renderer.as_mut() {
       renderer.render()?;
     }
 
@@ -209,6 +197,20 @@ impl HelloWorldApp {
     Self {
       renderer: None,
       imgui: None,
+    }
+  }
+
+  fn ui(&mut self) {
+    unsafe {
+      ImGui_Begin(
+        "Hello, World!".as_ptr() as *const i8,
+        null_mut(),
+        ImGuiWindowFlags_::ImGuiWindowFlags_None.0
+      );
+
+      ImGui_Text("Hello, World!".as_ptr() as *const i8);
+
+      ImGui_End();
     }
   }
 

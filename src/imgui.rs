@@ -12,11 +12,13 @@ use easy_imgui_sys::*;
 pub struct HalaImGui {
   pub(crate) vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>,
 
-  imgui: *mut ImGuiContext,
+  font_sampler: std::mem::ManuallyDrop<hala_gfx::HalaSampler>,
+  font_descriptor_pool: std::mem::ManuallyDrop<Rc<RefCell<hala_gfx::HalaDescriptorPool>>>,
+  font_descriptor_set: std::mem::ManuallyDrop<hala_gfx::HalaDescriptorSet>,
 
-  font_command_buffers: Option<hala_gfx::HalaCommandBufferSet>,
   font_image: Option<hala_gfx::HalaImage>,
-  font_descriptor_set: Option<hala_gfx::HalaDescriptorSet>,
+
+  imgui: *mut ImGuiContext,
 }
 
 /// The implementation of the drop trait for the ImGUI context.
@@ -24,13 +26,15 @@ impl Drop for HalaImGui {
 
   /// Drop the ImGUI context.
   fn drop(&mut self) {
-    self.font_descriptor_set = None;
     self.font_image = None;
-    self.font_command_buffers = None;
 
     unsafe {
       ImGui_DestroyContext(self.imgui);
       self.imgui = null_mut();
+
+      std::mem::ManuallyDrop::drop(&mut self.font_descriptor_set);
+      std::mem::ManuallyDrop::drop(&mut self.font_descriptor_pool);
+      std::mem::ManuallyDrop::drop(&mut self.font_sampler);
     }
     log::debug!("ImGUI context dropped.");
   }
@@ -42,6 +46,67 @@ impl HalaImGui {
 
   /// Create a new ImGUI context.
   pub fn new(vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>) -> Result<Self> {
+    let (
+      font_descriptor_pool,
+      font_descriptor_set,
+      font_sampler,
+    ) = {
+      let context = vk_ctx.borrow();
+
+      let font_sampler = hala_gfx::HalaSampler::new(
+        Rc::clone(&context.logical_device),
+        (hala_gfx::HalaFilter::LINEAR, hala_gfx::HalaFilter::LINEAR),
+        hala_gfx::HalaSamplerMipmapMode::LINEAR,
+        (hala_gfx::HalaSamplerAddressMode::REPEAT, hala_gfx::HalaSamplerAddressMode::REPEAT, hala_gfx::HalaSamplerAddressMode::REPEAT),
+        0.0,
+        false,
+        1.0,
+        (-1000.0, 1000.0),
+        "imgui_font.sampler",
+      )?;
+
+      let font_descriptor_pool = Rc::new(
+        RefCell::new(
+          hala_gfx::HalaDescriptorPool::new(
+            Rc::clone(&context.logical_device),
+            &[
+              (hala_gfx::HalaDescriptorType::COMBINED_IMAGE_SAMPLER, 1),
+            ],
+            1,
+            "imgui_font.descpool",
+          )?
+        )
+      );
+
+      let font_descriptor_set = hala_gfx::HalaDescriptorSet::new(
+        Rc::clone(&context.logical_device),
+        Rc::clone(&font_descriptor_pool),
+        hala_gfx::HalaDescriptorSetLayout::new(
+          Rc::clone(&context.logical_device),
+          &[
+            (
+              0,
+              hala_gfx::HalaDescriptorType::COMBINED_IMAGE_SAMPLER,
+              1,
+              hala_gfx::HalaShaderStageFlags::FRAGMENT,
+              hala_gfx::HalaDescriptorBindingFlags::PARTIALLY_BOUND,
+            ),
+          ],
+          "imgui_font.descsetlayout",
+        )?,
+        1,
+        0,
+        "imgui_font.descset",
+      )?;
+
+      (
+        std::mem::ManuallyDrop::new(font_descriptor_pool),
+        std::mem::ManuallyDrop::new(font_descriptor_set),
+        std::mem::ManuallyDrop::new(font_sampler),
+      )
+    };
+
+    // Initialize ImGUI.
     let imgui = unsafe {
       let imgui = ImGui_CreateContext(null_mut());
       ImGui_StyleColorsDark(null_mut());
@@ -58,10 +123,11 @@ impl HalaImGui {
     log::debug!("ImGUI context created.");
     Ok(Self {
       vk_ctx,
-      imgui,
-      font_command_buffers: None,
+      font_descriptor_pool,
+      font_descriptor_set,
+      font_sampler,
       font_image: None,
-      font_descriptor_set: None,
+      imgui,
     })
   }
 
@@ -76,7 +142,7 @@ impl HalaImGui {
       (*io).DisplaySize = ImVec2 { x: width as f32, y: height as f32 };
       (*io).DisplayFramebufferScale = ImVec2 { x: 1.0, y: 1.0 };
 
-      if self.font_descriptor_set.is_none() {
+      if self.font_image.is_none() {
         self.create_fonts_texture()?;
       }
 
@@ -90,6 +156,11 @@ impl HalaImGui {
   pub fn render(&self) -> Result<()> {
     unsafe {
       ImGui_Render();
+      let draw_data = ImGui_GetDrawData();
+      let is_minimized = (*draw_data).DisplaySize.x <= 0.0 || (*draw_data).DisplaySize.y <= 0.0;
+      if !is_minimized {
+        // TODO: Draw UI.
+      }
     }
 
     Ok(())
@@ -99,24 +170,11 @@ impl HalaImGui {
   fn create_fonts_texture(&mut self) -> Result<()> {
     let context = self.vk_ctx.borrow();
 
-    // Create command buffer.
-    if self.font_command_buffers.is_none() {
-      self.font_command_buffers = Some(hala_gfx::HalaCommandBufferSet::new(
-        Rc::clone(&context.logical_device),
-        Rc::clone(&context.pools),
-      hala_gfx::HalaCommandBufferType::GRAPHICS,
-      hala_gfx::HalaCommandBufferLevel::PRIMARY,
-      1,
-      "imgui_font.cmdbuf",
-      )?);
-    }
-    let font_command_buffers = self.font_command_buffers.as_ref()
-      .ok_or(anyhow::anyhow!("Failed to get the font command buffers."))?;
-
     let (
-      _upload_size,
+      upload_size,
       width,
-      height
+      height,
+      pixels,
      ) = unsafe {
       let io = ImGui_GetIO();
       let mut pixels: *mut u8 = null_mut();
@@ -130,14 +188,15 @@ impl HalaImGui {
         &mut height,
         &mut bytes_per_pixel);
       (
-        (width * height * bytes_per_pixel) as usize,
+        (width * height * bytes_per_pixel) as u64,
         width as u32,
-        height as u32
+        height as u32,
+        pixels,
       )
     };
 
     // Create image.
-    self.font_image = Some(hala_gfx::HalaImage::new_2d(
+    let font_image = hala_gfx::HalaImage::new_2d(
       Rc::clone(&context.logical_device),
       hala_gfx::HalaImageUsageFlags::SAMPLED | hala_gfx::HalaImageUsageFlags::TRANSFER_DST,
       hala_gfx::HalaFormat::R8G8B8A8_UNORM,
@@ -147,29 +206,51 @@ impl HalaImGui {
       1,
       hala_gfx::HalaMemoryLocation::GpuOnly,
       "imgui_font.image",
-    )?);
+    )?;
+    let upload_buffer = hala_gfx::HalaBuffer::new(
+      Rc::clone(&context.logical_device),
+      upload_size,
+      hala_gfx::HalaBufferUsageFlags::TRANSFER_SRC,
+      hala_gfx::HalaMemoryLocation::CpuToGpu,
+      "imgui_font_upload.buffer",
+    )?;
 
-    // Start command buffer.
-    font_command_buffers.reset(0, true)?;
-    font_command_buffers.begin(0, hala_gfx::HalaCommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
+    let font_command_buffers = hala_gfx::HalaCommandBufferSet::new(
+      Rc::clone(&context.logical_device),
+      Rc::clone(&context.pools),
+      hala_gfx::HalaCommandBufferType::GRAPHICS,
+      hala_gfx::HalaCommandBufferLevel::PRIMARY,
+      1,
+      "imgui_font.cmdbuf",
+    )?;
+    font_image.update_gpu_memory_with_buffer_raw(
+      pixels,
+      upload_size as usize,
+      hala_gfx::HalaPipelineStageFlags2::FRAGMENT_SHADER
+        | hala_gfx::HalaPipelineStageFlags2::TRANSFER,
+      &upload_buffer,
+      &font_command_buffers,
+    )?;
 
-    // End command buffer.
-    font_command_buffers.end(0)?;
+    // Update descriptor set.
+    self.font_descriptor_set.update_combined_image_samplers(
+      0,
+      0,
+      &[
+        (&font_image, &(*self.font_sampler)),
+      ],
+    );
 
-    context.logical_device.borrow().graphics_submit(font_command_buffers, 0, 0)?;
-    context.logical_device.borrow().wait_idle()?;
+    self.font_image = Some(font_image);
 
-    self.font_descriptor_set = None;
+    // Store identifier.
+    unsafe {
+      let io = ImGui_GetIO();
+
+      (*(*io).Fonts).TexID = self.font_descriptor_set.handle(0) as ImTextureID;
+    }
 
     Ok(())
   }
-
-  // /// Add a texture.
-  // /// param sampler: The sampler.
-  // /// param image: The image.
-  // /// return: The result.
-  // fn add_texture(&mut self, sampler: &hala_gfx::HalaSampler, image: &hala_gfx::HalaImage,) -> Result<()> {
-  //   Ok(())
-  // }
 
 }
