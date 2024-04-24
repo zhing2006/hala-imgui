@@ -74,12 +74,17 @@ impl HelloWorldRenderer {
   /// Update the renderer.
   /// param delta_time: The delta time.
   /// return: The result.
-  pub fn update(&mut self, _delta_time: f64) -> Result<()> {
+  pub fn update<F>(&mut self, _delta_time: f64, ui_fn: F) -> Result<()>
+    where F: FnOnce(usize, &hala_gfx::HalaCommandBufferSet) -> Result<(), hala_gfx::HalaGfxError>
+  {
     self.image_index = self.context.borrow().prepare_frame()?;
     self.context.borrow().record_graphics_command_buffer(
-      self.image_index, &self.graphics_command_buffers,
+      self.image_index,
+      &self.graphics_command_buffers,
       Some(([25.0 / 255.0, 118.0 / 255.0, 210.0 / 255.0, 1.0], 1.0, 0)),
-      |_index, _command_buffers| {
+      |index, command_buffers| {
+        ui_fn(index, command_buffers)?;
+
         Ok(())
       },
       None,
@@ -165,15 +170,21 @@ impl HalaApplication for HelloWorldApp {
 
   fn update(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()> {
     if let Some(imgui) = self.imgui.as_mut() {
-      imgui.new_frame(delta_time, width, height)?;
+      imgui.begin_frame(delta_time, width, height)?;
     }
     self.ui();
     if let Some(imgui) = self.imgui.as_mut() {
-      imgui.render()?;
+      imgui.end_frame()?;
     }
 
     if let Some(renderer) = self.renderer.as_mut() {
-      renderer.update(delta_time)?;
+      renderer.update(delta_time, |index, command_buffers| {
+        if let Some(imgui) = self.imgui.as_mut() {
+          imgui.draw(index, command_buffers)?;
+        }
+
+        Ok(())
+      })?;
     }
 
     Ok(())
