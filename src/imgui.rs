@@ -123,6 +123,8 @@ pub struct HalaImGui {
   pipeline: std::mem::ManuallyDrop<hala_gfx::HalaGraphicsPipeline>,
 
   font_image: Option<hala_gfx::HalaImage>,
+  vertex_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
+  index_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
 
   imgui: *mut ImGuiContext,
 }
@@ -162,6 +164,7 @@ impl HalaImGui {
       font_descriptor_set,
       font_sampler,
       pipeline,
+      num_of_images,
     ) = {
       let context = vk_ctx.borrow();
 
@@ -291,6 +294,7 @@ impl HalaImGui {
         std::mem::ManuallyDrop::new(font_descriptor_set),
         std::mem::ManuallyDrop::new(font_sampler),
         std::mem::ManuallyDrop::new(pipeline),
+        context.swapchain.num_of_images,
       )
     };
 
@@ -308,6 +312,11 @@ impl HalaImGui {
       (*io).ConfigFlags = conf_flags.0;
     };
 
+    let mut vertex_buffers = Vec::with_capacity(num_of_images);
+    vertex_buffers.resize_with(num_of_images, || None);
+    let mut index_buffers = Vec::with_capacity(num_of_images);
+    index_buffers.resize_with(num_of_images, || None);
+
     log::debug!("ImGUI context created.");
     Ok(Self {
       vk_ctx,
@@ -318,6 +327,8 @@ impl HalaImGui {
       font_sampler,
       pipeline,
       font_image: None,
+      vertex_buffers,
+      index_buffers,
       imgui,
     })
   }
@@ -358,18 +369,76 @@ impl HalaImGui {
   /// param index: The index.
   /// param command_buffers: The command buffers.
   /// return: The result.
-  pub fn draw(&self, index: usize, command_buffers: &hala_gfx::HalaCommandBufferSet) -> core::result::Result<(), hala_gfx::HalaGfxError> {
-    let draw_data = unsafe {
+  pub fn draw(&mut self, index: usize, command_buffers: &hala_gfx::HalaCommandBufferSet) -> core::result::Result<(), hala_gfx::HalaGfxError> {
+    // Get draw data.
+    let (
+      draw_data,
+      total_vtx_count,
+      total_idx_count,
+    ) = unsafe {
       let draw_data = ImGui_GetDrawData();
       let is_minimized = (*draw_data).DisplaySize.x <= 0.0 || (*draw_data).DisplaySize.y <= 0.0;
       if !is_minimized {
-        draw_data
+        (draw_data as *const ImDrawData, (*draw_data).TotalVtxCount, (*draw_data).TotalIdxCount)
       } else {
-        null()
+        (null(), 0, 0)
       }
     };
-    if draw_data.is_null() {
+    if draw_data.is_null() || total_vtx_count == 0 || total_idx_count == 0 {
       return core::result::Result::Ok(());
+    }
+
+    let context = self.vk_ctx.borrow();
+
+    // Create or resize the vertex/index buffers.
+    let vertex_buffer_size = total_vtx_count as u64 * std::mem::size_of::<ImDrawVert>() as u64;
+    let vertex_buffer = match self.vertex_buffers[index] {
+      Some(ref buffer) if buffer.size >= vertex_buffer_size => buffer,
+      _ => {
+        self.vertex_buffers[index] = Some(hala_gfx::HalaBuffer::new(
+          Rc::clone(&context.logical_device),
+          vertex_buffer_size,
+          hala_gfx::HalaBufferUsageFlags::VERTEX_BUFFER,
+          hala_gfx::HalaMemoryLocation::CpuToGpu,
+          &format!("imgui_vertex_{}.buffer", index),
+        )?);
+        self.vertex_buffers[index].as_ref().unwrap()
+      },
+    };
+    let index_buffer_size = total_idx_count as u64 * std::mem::size_of::<ImDrawIdx>() as u64;
+    let index_buffer = match self.index_buffers[index] {
+      Some(ref buffer) if buffer.size >= index_buffer_size => buffer,
+      _ => {
+        self.index_buffers[index] = Some(hala_gfx::HalaBuffer::new(
+          Rc::clone(&context.logical_device),
+          index_buffer_size,
+          hala_gfx::HalaBufferUsageFlags::INDEX_BUFFER,
+          hala_gfx::HalaMemoryLocation::CpuToGpu,
+          &format!("imgui_index_{}.buffer", index),
+        )?);
+        self.index_buffers[index].as_ref().unwrap()
+      },
+    };
+
+    // Fill the vertex/index buffers.
+    unsafe {
+      let mut vtx_offset = 0;
+      let mut idx_offset = 0;
+      for n in 0..(*draw_data).CmdListsCount {
+        let cmd_list = (*draw_data).CmdLists[n as usize];
+        vertex_buffer.update_memory_raw(
+          vtx_offset,
+          (*cmd_list).VtxBuffer.Data as *const u8,
+          (*cmd_list).VtxBuffer.Size as usize,
+        )?;
+        vtx_offset += (*cmd_list).VtxBuffer.Size as usize;
+        index_buffer.update_memory_raw(
+          idx_offset,
+          (*cmd_list).IdxBuffer.Data as *const u8,
+          (*cmd_list).IdxBuffer.Size as usize,
+        )?;
+        idx_offset += (*cmd_list).IdxBuffer.Size as usize;
+      }
     }
 
     command_buffers.bind_graphics_pipeline(index, &self.pipeline);
