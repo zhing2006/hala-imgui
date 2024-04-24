@@ -442,12 +442,129 @@ impl HalaImGui {
     }
 
     command_buffers.bind_graphics_pipeline(index, &self.pipeline);
-    command_buffers.bind_graphics_descriptor_sets(
+    command_buffers.bind_vertex_buffers(index, 0, &[vertex_buffer], &[0]);
+    command_buffers.bind_index_buffers(index, &[index_buffer], &[0], hala_gfx::HalaIndexType::UINT16);
+
+    // Will project scissor/clipping rectangles into framebuffer space
+    let (clip_off, clip_scale, fb_size) = unsafe {
+      let io = ImGui_GetIO();
+      (
+        (*draw_data).DisplayPos,        // (0,0) unless using multi-viewports
+        (*draw_data).FramebufferScale,  // (1,1) unless using retina display which are often (2,2)
+        (*io).DisplaySize,
+      )
+    };
+
+    // Render command list.
+    unsafe {
+      let mut vtx_offset = 0;
+      let mut idx_offset = 0;
+      for n in 0..(*draw_data).CmdListsCount {
+        let cmd_list = (*draw_data).CmdLists[n as usize];
+        for cmd_i in 0..(*cmd_list).CmdBuffer.Size {
+          let cmd = &(*cmd_list).CmdBuffer[cmd_i as usize];
+
+          match cmd.UserCallback {
+            Some(cb) => {
+              cb(cmd_list, cmd);
+            },
+            None => {
+              // Project scissor/clipping rectangles into framebuffer space.
+              let mut clip_min = ImVec2 {
+                x: (cmd.ClipRect.x - clip_off.x) * clip_scale.x,
+                y: (cmd.ClipRect.y - clip_off.y) * clip_scale.y,
+              };
+              let mut clip_max = ImVec2 {
+                x: (cmd.ClipRect.z - clip_off.x) * clip_scale.x,
+                y: (cmd.ClipRect.w - clip_off.y) * clip_scale.y,
+              };
+
+              // Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds.
+              if clip_min.x < 0.0 { clip_min.x = 0.0; }
+              if clip_min.y < 0.0 { clip_min.y = 0.0; }
+              if clip_max.x > fb_size.x { clip_max.x = fb_size.x; }
+              if clip_max.y > fb_size.y { clip_max.y = fb_size.y; }
+              if clip_max.x <= clip_min.x || clip_max.y <= clip_min.y {
+                continue;
+              }
+
+              // Set viewport.
+              command_buffers.set_viewport(
+                index,
+                0,
+                &[(
+                  clip_min.x,
+                  clip_min.y,
+                  clip_max.x - clip_min.x,
+                  clip_max.y - clip_min.y,
+                  0.0,
+                  1.0,
+                )],
+              );
+
+              // Apply scissor/clipping rectangle.
+              command_buffers.set_scissor(
+                index,
+                0,
+                &[
+                  (clip_min.x as i32, clip_min.y as i32, (clip_max.x - clip_min.x) as u32, (clip_max.y - clip_min.y) as u32)
+                ],
+              );
+
+              // Bind DescriptorSet with font or user texture.
+              command_buffers.bind_graphics_descriptor_sets(
+                index,
+                &self.pipeline,
+                0,
+                &[&(*self.font_descriptor_set)],
+                &[],
+              );
+
+              // Push constants.
+              let constant = (
+                clip_scale.x,
+                clip_scale.y,
+                clip_off.x,
+                clip_off.y,
+              );
+              let bytes: &[u8] = {
+                let ptr = &constant as *const _ as *const u8;
+                std::slice::from_raw_parts(ptr, std::mem::size_of_val(&constant))
+              };
+              command_buffers.push_constants(
+                index,
+                &self.pipeline,
+                hala_gfx::HalaShaderStageFlags::VERTEX,
+                0,
+                bytes,
+              );
+
+              // TODO: Draw.
+              command_buffers.draw_indexed(
+                index,
+                cmd.ElemCount,
+                1,
+                cmd.IdxOffset + idx_offset,
+                cmd.VtxOffset as i32 + vtx_offset,
+                0,
+              );
+            }
+          }
+        }
+
+        idx_offset += (*cmd_list).IdxBuffer.Size as u32;
+        vtx_offset += (*cmd_list).VtxBuffer.Size;
+      }
+    }
+
+    // Note: at this point both vkCmdSetViewport() and vkCmdSetScissor() have been called.
+    // Our last values will leak into user/application rendering.
+    command_buffers.set_scissor(
       index,
-      &self.pipeline,
       0,
-      &[&(*self.font_descriptor_set)],
-      &[],
+      &[
+        (0, 0, fb_size.x as u32, fb_size.y as u32)
+      ],
     );
 
     core::result::Result::Ok(())

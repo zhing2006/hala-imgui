@@ -162,9 +162,9 @@ impl HalaApplication for HelloWorldApp {
   }
 
   fn after_run(&mut self) {
-    self.imgui = None;
     if let Some(renderer) = self.renderer.take() {
       renderer.wait_idle().expect("Failed to wait the renderer idle.");
+      self.imgui = None;
     }
   }
 
