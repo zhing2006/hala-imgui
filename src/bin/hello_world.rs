@@ -138,6 +138,13 @@ impl HalaApplication for HelloWorldApp {
     winit::dpi::PhysicalSize::new(800, 600)
   }
 
+  fn get_imgui(&self) -> Option<&HalaImGui> {
+    self.imgui.as_ref()
+  }
+  fn get_imgui_mut(&mut self) -> Option<&mut HalaImGui> {
+    self.imgui.as_mut()
+  }
+
   fn before_run(&mut self, width: u32, height: u32, window: &winit::window::Window) -> Result<()> {
     let gpu_req = hala_gfx::HalaGPURequirements {
       width,

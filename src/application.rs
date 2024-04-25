@@ -8,10 +8,14 @@ use log4rs::append::rolling_file::RollingFileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 
 use winit::{
-  event::{Event, WindowEvent},
+  event::{Event, WindowEvent, Ime},
   event_loop::{ControlFlow, EventLoop},
   window::{WindowBuilder, WindowButtons},
 };
+
+use easy_imgui_sys::*;
+
+use crate::HalaImGui;
 
 /// The application trait.
 pub trait HalaApplication {
@@ -38,6 +42,14 @@ pub trait HalaApplication {
   /// Get the window size.
   /// return: The window size.
   fn get_window_size(&self) -> winit::dpi::PhysicalSize<u32>;
+
+  /// Get the ImGui context ref.
+  /// return: The ImGui context reference.
+  fn get_imgui(&self) -> Option<&HalaImGui>;
+
+  /// Get the ImGui context mut.
+  /// return: The ImGui context mutable reference.
+  fn get_imgui_mut(&mut self) -> Option<&mut HalaImGui>;
 
   /// The before run function.
   /// param width: The width of the window.
@@ -122,6 +134,15 @@ pub trait HalaApplication {
     event_loop.run(move |event, elwt| {
       elwt.set_control_flow(ControlFlow::Poll);
       match event {
+        Event::AboutToWait => {
+          let imgui = self.get_imgui();
+          match imgui {
+            Some(imgui) if !imgui.is_any_mouse_down() => {
+              window.request_redraw();
+            },
+            _ => ()
+          }
+        }
         Event::WindowEvent {
           event,
           window_id,
@@ -152,9 +173,118 @@ pub trait HalaApplication {
               },
             }
           },
+          WindowEvent::ModifiersChanged(mods) if window_id == window.id() => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              imgui.add_key_event(ImGuiKey::ImGuiMod_Ctrl, mods.state().control_key());
+              imgui.add_key_event(ImGuiKey::ImGuiMod_Shift, mods.state().shift_key());
+              imgui.add_key_event(ImGuiKey::ImGuiMod_Alt, mods.state().alt_key());
+              imgui.add_key_event(ImGuiKey::ImGuiMod_Super, mods.state().super_key());
+            }
+          },
+          WindowEvent::KeyboardInput {
+            event: winit::event::KeyEvent {
+              physical_key,
+              text,
+              state,
+              ..
+            },
+            is_synthetic: false,
+            ..
+          } => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              let is_pressed = state == winit::event::ElementState::Pressed;
+              if let Some(key) = HalaImGui::to_key(physical_key) {
+                imgui.add_key_event(key, is_pressed);
+
+                if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
+                  let kmod = match keycode {
+                    winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => Some(ImGuiKey::ImGuiMod_Ctrl),
+                    winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => Some(ImGuiKey::ImGuiMod_Shift),
+                    winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => Some(ImGuiKey::ImGuiMod_Alt),
+                    winit::keyboard::KeyCode::SuperLeft | winit::keyboard::KeyCode::SuperRight => Some(ImGuiKey::ImGuiMod_Super),
+                    _ => None,
+                  };
+                  if let Some(kmod) = kmod {
+                    imgui.add_key_event(kmod, is_pressed);
+                  }
+                }
+              }
+              if is_pressed {
+                if let Some(text) = text {
+                  for c in text.chars() {
+                    imgui.add_input_character(c as u32);
+                  }
+                }
+              }
+            }
+          },
+          WindowEvent::Ime(Ime::Commit(text)) => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              for c in text.chars() {
+                imgui.add_input_character(c as u32);
+              }
+            }
+          },
+          WindowEvent::CursorMoved {
+            position,
+            ..
+          } => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              let scale = window.scale_factor();
+              let position = position.to_logical::<f32>(scale);
+              imgui.add_mouse_pos_event(position.x, position.y);
+            }
+          },
+          WindowEvent::CursorLeft { .. } => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              imgui.add_mouse_pos_event(f32::MAX, f32::MAX);
+            }
+          },
+          WindowEvent::MouseInput {
+            state,
+            button,
+            ..
+          } => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              if let Some(button) = HalaImGui::to_button(button) {
+                let is_pressed = state == winit::event::ElementState::Pressed;
+                imgui.add_mouse_button_event(button, is_pressed);
+              }
+            }
+          },
+          WindowEvent::MouseWheel {
+            delta,
+            phase: winit::event::TouchPhase::Moved,
+            ..
+          } => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              let (h, v) = match delta {
+                winit::event::MouseScrollDelta::LineDelta(h, v) => (h, v),
+                winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                  let scale = imgui.get_display_framebuffer_scale();
+                  let f_scale = imgui.get_font_size();
+                  let scale = scale.0 * f_scale;
+                  (pos.x as f32 / scale, pos.y as f32 / scale)
+                },
+              };
+              imgui.add_mouse_wheel_event(h, v);
+            }
+          },
+          WindowEvent::Focused(is_focused) => {
+            let imgui = self.get_imgui();
+            if let Some(imgui) = imgui {
+              imgui.add_focus_event(is_focused);
+            }
+          },
           _ => (),
         },
-        Event::AboutToWait => window.request_redraw(),
         _ => (),
       }
     })?;

@@ -6,6 +6,12 @@ use std::{
 
 use anyhow::{Ok, Result};
 
+use winit::event::MouseButton;
+use winit::keyboard::{
+  PhysicalKey,
+  KeyCode,
+};
+
 use easy_imgui_sys::*;
 
 // # glslangValidator -V -x -o glsl_shader.vert.u32 glsl_shader.vert
@@ -154,6 +160,133 @@ impl Drop for HalaImGui {
 
 /// The implementation of the ImGUI context.
 impl HalaImGui {
+
+  pub fn to_button(btncode: MouseButton) -> Option<ImGuiMouseButton> {
+    let btn = match btncode {
+      MouseButton::Left => ImGuiMouseButton_::ImGuiMouseButton_Left.0,
+      MouseButton::Right => ImGuiMouseButton_::ImGuiMouseButton_Right.0,
+      MouseButton::Middle => ImGuiMouseButton_::ImGuiMouseButton_Middle.0,
+      MouseButton::Other(x) if x < ImGuiMouseButton_::ImGuiMouseButton_COUNT.0 as u16 => {
+        ImGuiMouseButton_(x as i32).0
+      }
+      _ => return None,
+    };
+    Some(btn)
+  }
+  pub fn to_key(phys_key: PhysicalKey) -> Option<ImGuiKey> {
+    let key = match phys_key {
+      PhysicalKey::Code(code) => match code {
+        KeyCode::Tab => ImGuiKey::ImGuiKey_Tab,
+        KeyCode::ArrowLeft => ImGuiKey::ImGuiKey_LeftArrow,
+        KeyCode::ArrowRight => ImGuiKey::ImGuiKey_RightArrow,
+        KeyCode::ArrowUp => ImGuiKey::ImGuiKey_UpArrow,
+        KeyCode::ArrowDown => ImGuiKey::ImGuiKey_DownArrow,
+        KeyCode::PageUp => ImGuiKey::ImGuiKey_PageUp,
+        KeyCode::PageDown => ImGuiKey::ImGuiKey_PageDown,
+        KeyCode::Home => ImGuiKey::ImGuiKey_Home,
+        KeyCode::End => ImGuiKey::ImGuiKey_End,
+        KeyCode::Insert => ImGuiKey::ImGuiKey_Insert,
+        KeyCode::Delete => ImGuiKey::ImGuiKey_Delete,
+        KeyCode::Backspace => ImGuiKey::ImGuiKey_Backspace,
+        KeyCode::Space => ImGuiKey::ImGuiKey_Space,
+        KeyCode::Enter => ImGuiKey::ImGuiKey_Enter,
+        KeyCode::Escape => ImGuiKey::ImGuiKey_Escape,
+        KeyCode::ControlLeft => ImGuiKey::ImGuiKey_LeftCtrl,
+        KeyCode::ShiftLeft => ImGuiKey::ImGuiKey_LeftShift,
+        KeyCode::AltLeft => ImGuiKey::ImGuiKey_LeftAlt,
+        KeyCode::SuperLeft => ImGuiKey::ImGuiKey_LeftSuper,
+        KeyCode::ControlRight => ImGuiKey::ImGuiKey_RightCtrl,
+        KeyCode::ShiftRight => ImGuiKey::ImGuiKey_RightShift,
+        KeyCode::AltRight => ImGuiKey::ImGuiKey_RightAlt,
+        KeyCode::SuperRight => ImGuiKey::ImGuiKey_RightSuper,
+        KeyCode::Digit0 => ImGuiKey::ImGuiKey_0,
+        KeyCode::Digit1 => ImGuiKey::ImGuiKey_1,
+        KeyCode::Digit2 => ImGuiKey::ImGuiKey_2,
+        KeyCode::Digit3 => ImGuiKey::ImGuiKey_3,
+        KeyCode::Digit4 => ImGuiKey::ImGuiKey_4,
+        KeyCode::Digit5 => ImGuiKey::ImGuiKey_5,
+        KeyCode::Digit6 => ImGuiKey::ImGuiKey_6,
+        KeyCode::Digit7 => ImGuiKey::ImGuiKey_7,
+        KeyCode::Digit8 => ImGuiKey::ImGuiKey_8,
+        KeyCode::Digit9 => ImGuiKey::ImGuiKey_9,
+        KeyCode::KeyA => ImGuiKey::ImGuiKey_A,
+        KeyCode::KeyB => ImGuiKey::ImGuiKey_B,
+        KeyCode::KeyC => ImGuiKey::ImGuiKey_C,
+        KeyCode::KeyD => ImGuiKey::ImGuiKey_D,
+        KeyCode::KeyE => ImGuiKey::ImGuiKey_E,
+        KeyCode::KeyF => ImGuiKey::ImGuiKey_F,
+        KeyCode::KeyG => ImGuiKey::ImGuiKey_G,
+        KeyCode::KeyH => ImGuiKey::ImGuiKey_H,
+        KeyCode::KeyI => ImGuiKey::ImGuiKey_I,
+        KeyCode::KeyJ => ImGuiKey::ImGuiKey_J,
+        KeyCode::KeyK => ImGuiKey::ImGuiKey_K,
+        KeyCode::KeyL => ImGuiKey::ImGuiKey_L,
+        KeyCode::KeyM => ImGuiKey::ImGuiKey_M,
+        KeyCode::KeyN => ImGuiKey::ImGuiKey_N,
+        KeyCode::KeyO => ImGuiKey::ImGuiKey_O,
+        KeyCode::KeyP => ImGuiKey::ImGuiKey_P,
+        KeyCode::KeyQ => ImGuiKey::ImGuiKey_Q,
+        KeyCode::KeyR => ImGuiKey::ImGuiKey_R,
+        KeyCode::KeyS => ImGuiKey::ImGuiKey_S,
+        KeyCode::KeyT => ImGuiKey::ImGuiKey_T,
+        KeyCode::KeyU => ImGuiKey::ImGuiKey_U,
+        KeyCode::KeyV => ImGuiKey::ImGuiKey_V,
+        KeyCode::KeyW => ImGuiKey::ImGuiKey_W,
+        KeyCode::KeyX => ImGuiKey::ImGuiKey_X,
+        KeyCode::KeyY => ImGuiKey::ImGuiKey_Y,
+        KeyCode::KeyZ => ImGuiKey::ImGuiKey_Z,
+        KeyCode::F1 => ImGuiKey::ImGuiKey_F1,
+        KeyCode::F2 => ImGuiKey::ImGuiKey_F2,
+        KeyCode::F3 => ImGuiKey::ImGuiKey_F3,
+        KeyCode::F4 => ImGuiKey::ImGuiKey_F4,
+        KeyCode::F5 => ImGuiKey::ImGuiKey_F5,
+        KeyCode::F6 => ImGuiKey::ImGuiKey_F6,
+        KeyCode::F7 => ImGuiKey::ImGuiKey_F7,
+        KeyCode::F8 => ImGuiKey::ImGuiKey_F8,
+        KeyCode::F9 => ImGuiKey::ImGuiKey_F9,
+        KeyCode::F10 => ImGuiKey::ImGuiKey_F10,
+        KeyCode::F11 => ImGuiKey::ImGuiKey_F11,
+        KeyCode::F12 => ImGuiKey::ImGuiKey_F12,
+        KeyCode::Quote => ImGuiKey::ImGuiKey_Apostrophe,
+        KeyCode::Comma => ImGuiKey::ImGuiKey_Comma,
+        KeyCode::Minus => ImGuiKey::ImGuiKey_Minus,
+        KeyCode::Period => ImGuiKey::ImGuiKey_Period,
+        KeyCode::Slash => ImGuiKey::ImGuiKey_Slash,
+        KeyCode::Semicolon => ImGuiKey::ImGuiKey_Semicolon,
+        KeyCode::Equal => ImGuiKey::ImGuiKey_Equal,
+        KeyCode::BracketLeft => ImGuiKey::ImGuiKey_LeftBracket,
+        KeyCode::Backslash => ImGuiKey::ImGuiKey_Backslash,
+        KeyCode::BracketRight => ImGuiKey::ImGuiKey_RightBracket,
+        KeyCode::Backquote => ImGuiKey::ImGuiKey_GraveAccent,
+        KeyCode::CapsLock => ImGuiKey::ImGuiKey_CapsLock,
+        KeyCode::ScrollLock => ImGuiKey::ImGuiKey_ScrollLock,
+        KeyCode::NumLock => ImGuiKey::ImGuiKey_NumLock,
+        KeyCode::PrintScreen => ImGuiKey::ImGuiKey_PrintScreen,
+        KeyCode::Pause => ImGuiKey::ImGuiKey_Pause,
+        KeyCode::Numpad0 => ImGuiKey::ImGuiKey_Keypad0,
+        KeyCode::Numpad1 => ImGuiKey::ImGuiKey_Keypad1,
+        KeyCode::Numpad2 => ImGuiKey::ImGuiKey_Keypad2,
+        KeyCode::Numpad3 => ImGuiKey::ImGuiKey_Keypad3,
+        KeyCode::Numpad4 => ImGuiKey::ImGuiKey_Keypad4,
+        KeyCode::Numpad5 => ImGuiKey::ImGuiKey_Keypad5,
+        KeyCode::Numpad6 => ImGuiKey::ImGuiKey_Keypad6,
+        KeyCode::Numpad7 => ImGuiKey::ImGuiKey_Keypad7,
+        KeyCode::Numpad8 => ImGuiKey::ImGuiKey_Keypad8,
+        KeyCode::Numpad9 => ImGuiKey::ImGuiKey_Keypad9,
+        KeyCode::NumpadDecimal => ImGuiKey::ImGuiKey_KeypadDecimal,
+        KeyCode::NumpadDivide => ImGuiKey::ImGuiKey_KeypadDivide,
+        KeyCode::NumpadMultiply => ImGuiKey::ImGuiKey_KeypadMultiply,
+        KeyCode::NumpadSubtract => ImGuiKey::ImGuiKey_KeypadSubtract,
+        KeyCode::NumpadAdd => ImGuiKey::ImGuiKey_KeypadAdd,
+        KeyCode::NumpadEnter => ImGuiKey::ImGuiKey_KeypadEnter,
+        KeyCode::NumpadEqual => ImGuiKey::ImGuiKey_KeypadEqual,
+        KeyCode::NumpadBackspace => ImGuiKey::ImGuiKey_Backspace,
+        _ => return None,
+      },
+      PhysicalKey::Unidentified(_) => return None,
+    };
+    Some(key)
+  }
 
   /// Create a new ImGUI context.
   pub fn new(vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>) -> Result<Self> {
@@ -582,6 +715,89 @@ impl HalaImGui {
     );
 
     core::result::Result::Ok(())
+  }
+
+  /// Whether any mouse button is down.
+  /// return: Whether any mouse button is down.
+  pub fn is_any_mouse_down(&self) -> bool {
+    unsafe {
+      ImGui_IsAnyMouseDown()
+    }
+  }
+
+  /// Get the display scale.
+  /// return: The display scale.
+  pub fn get_display_framebuffer_scale(&self) -> (f32, f32) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ((*io).DisplayFramebufferScale.x, (*io).DisplayFramebufferScale.y)
+    }
+  }
+
+  /// Get font size.
+  /// return: The font size.
+  pub fn get_font_size(&self) -> f32 {
+    unsafe {
+      ImGui_GetFontSize()
+    }
+  }
+
+  /// Add a key event.
+  /// param key: The key.
+  /// param is_down: Whether the key is down.
+  pub fn add_key_event(&self, key: ImGuiKey, is_down: bool) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddKeyEvent(io, key, is_down)
+    }
+  }
+
+  /// Add a input character.
+  /// param char: The character.
+  pub fn add_input_character(&self, char: u32) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddInputCharacter(io, char)
+    }
+  }
+
+  /// Add a focus event.
+  /// param is_focused: Whether the window is focused.
+  pub fn add_focus_event(&self, is_focused: bool) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddFocusEvent(io, is_focused)
+    }
+  }
+
+  /// Add a mouse position event.
+  /// param x: The x position.
+  /// param y: The y position.
+  pub fn add_mouse_pos_event(&self, x: f32, y: f32) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddMousePosEvent(io, x, y)
+    }
+  }
+
+  /// Add a mouse button event.
+  /// param button: The button.
+  /// param is_down: Whether the button is down.
+  pub fn add_mouse_button_event(&self, button: ImGuiMouseButton, is_down: bool) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddMouseButtonEvent(io, button, is_down)
+    }
+  }
+
+  /// Add a mouse wheel event.
+  /// param h: The horizontal delta value.
+  /// param v: The vertical delta value.
+  pub fn add_mouse_wheel_event(&self, h: f32, v: f32) {
+    unsafe {
+      let io = ImGui_GetIO();
+      ImGuiIO_AddMouseWheelEvent(io, h, v)
+    }
   }
 
   /// Create the fonts texture.
