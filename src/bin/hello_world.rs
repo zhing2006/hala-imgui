@@ -1,12 +1,9 @@
 use std::{
   rc::Rc,
   cell::RefCell,
-  ptr::null_mut,
 };
 
 use anyhow::Result;
-
-use easy_imgui_sys::*;
 
 use hala_imgui::{
   HalaApplication,
@@ -180,10 +177,25 @@ impl HalaApplication for HelloWorldApp {
 
   fn update(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()> {
     if let Some(imgui) = self.imgui.as_mut() {
-      imgui.begin_frame(delta_time, width, height)?;
-    }
-    self.ui();
-    if let Some(imgui) = self.imgui.as_mut() {
+      imgui.begin_frame(
+        delta_time,
+        width,
+        height,
+        |ui| {
+          ui.window("Hello, World!")
+            .position([10.0, 10.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+              if ui.button_with_size("Click Me!", [100.0, 20.0]) {
+                self.show_text = !self.show_text;
+              }
+
+              if self.show_text {
+                ui.text("Hello, World!");
+              }
+            }
+          );
+        },
+      )?;
       imgui.end_frame()?;
     }
 
@@ -222,27 +234,6 @@ impl HelloWorldApp {
     }
   }
 
-  /// Draw the user interface.
-  fn ui(&mut self) {
-    unsafe {
-      ImGui_SetNextWindowPos(&ImVec2 { x: 10.0, y: 10.0 }, ImGuiCond_::ImGuiCond_None.0, &ImVec2 { x: 0.0, y: 0.0 });
-      ImGui_Begin(
-        "Hello, World!\0".as_ptr() as *const i8,
-        null_mut(),
-        ImGuiWindowFlags_::ImGuiWindowFlags_None.0
-      );
-
-      if ImGui_Button("Click Me!\0".as_ptr() as *const i8, &ImVec2 { x: 100.0, y: 20.0 }) {
-        self.show_text = !self.show_text;
-      }
-
-      if self.show_text {
-        ImGui_Text("Hello, World!\0".as_ptr() as *const i8);
-      }
-
-      ImGui_End();
-    }
-  }
 
 }
 
