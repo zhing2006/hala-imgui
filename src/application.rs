@@ -13,8 +13,6 @@ use winit::{
   window::{WindowBuilder, WindowButtons},
 };
 
-use easy_imgui_sys::*;
-
 use crate::HalaImGui;
 
 /// The application trait.
@@ -168,12 +166,12 @@ pub trait HalaApplication {
             }
           },
           WindowEvent::ModifiersChanged(mods) if window_id == window.id() => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
-              imgui.add_key_event(ImGuiKey::ImGuiMod_Ctrl, mods.state().control_key());
-              imgui.add_key_event(ImGuiKey::ImGuiMod_Shift, mods.state().shift_key());
-              imgui.add_key_event(ImGuiKey::ImGuiMod_Alt, mods.state().alt_key());
-              imgui.add_key_event(ImGuiKey::ImGuiMod_Super, mods.state().super_key());
+              imgui.add_key_event(imgui::Key::ModCtrl, mods.state().control_key());
+              imgui.add_key_event(imgui::Key::ModShift, mods.state().shift_key());
+              imgui.add_key_event(imgui::Key::ModAlt, mods.state().alt_key());
+              imgui.add_key_event(imgui::Key::ModSuper, mods.state().super_key());
             }
           },
           WindowEvent::KeyboardInput {
@@ -186,7 +184,7 @@ pub trait HalaApplication {
             is_synthetic: false,
             ..
           } => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               let is_pressed = state == winit::event::ElementState::Pressed;
               if let Some(key) = HalaImGui::to_key(physical_key) {
@@ -194,10 +192,10 @@ pub trait HalaApplication {
 
                 if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
                   let kmod = match keycode {
-                    winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => Some(ImGuiKey::ImGuiMod_Ctrl),
-                    winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => Some(ImGuiKey::ImGuiMod_Shift),
-                    winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => Some(ImGuiKey::ImGuiMod_Alt),
-                    winit::keyboard::KeyCode::SuperLeft | winit::keyboard::KeyCode::SuperRight => Some(ImGuiKey::ImGuiMod_Super),
+                    winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => Some(imgui::Key::ModCtrl),
+                    winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => Some(imgui::Key::ModShift),
+                    winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => Some(imgui::Key::ModAlt),
+                    winit::keyboard::KeyCode::SuperLeft | winit::keyboard::KeyCode::SuperRight => Some(imgui::Key::ModSuper),
                     _ => None,
                   };
                   if let Some(kmod) = kmod {
@@ -215,7 +213,7 @@ pub trait HalaApplication {
             }
           },
           WindowEvent::Ime(Ime::Commit(text)) => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               for c in text.chars() {
                 imgui.add_input_character(c as u32);
@@ -226,7 +224,7 @@ pub trait HalaApplication {
             position,
             ..
           } => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               let scale = window.scale_factor();
               let position = position.to_logical::<f32>(scale);
@@ -234,7 +232,7 @@ pub trait HalaApplication {
             }
           },
           WindowEvent::CursorLeft { .. } => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               imgui.add_mouse_pos_event(f32::MAX, f32::MAX);
             }
@@ -244,7 +242,7 @@ pub trait HalaApplication {
             button,
             ..
           } => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               if let Some(button) = HalaImGui::to_button(button) {
                 let is_pressed = state == winit::event::ElementState::Pressed;
@@ -257,14 +255,14 @@ pub trait HalaApplication {
             phase: winit::event::TouchPhase::Moved,
             ..
           } => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               let (h, v) = match delta {
                 winit::event::MouseScrollDelta::LineDelta(h, v) => (h, v),
                 winit::event::MouseScrollDelta::PixelDelta(pos) => {
                   let scale = imgui.get_display_framebuffer_scale();
                   let f_scale = imgui.get_font_size();
-                  let scale = scale.0 * f_scale;
+                  let scale = scale[0] * f_scale;
                   (pos.x as f32 / scale, pos.y as f32 / scale)
                 },
               };
@@ -272,7 +270,7 @@ pub trait HalaApplication {
             }
           },
           WindowEvent::Focused(is_focused) => {
-            let imgui = self.get_imgui();
+            let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               imgui.add_focus_event(is_focused);
             }

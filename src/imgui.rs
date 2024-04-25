@@ -1,18 +1,16 @@
 use std::{
   cell::RefCell,
-  ptr::{null_mut, null},
   rc::Rc
 };
 
 use anyhow::{Ok, Result};
 
+use imgui::internal::{RawCast, RawWrapper};
 use winit::event::MouseButton;
 use winit::keyboard::{
   PhysicalKey,
   KeyCode,
 };
-
-use easy_imgui_sys::*;
 
 // # glslangValidator -V -x -o glsl_shader.vert.u32 glsl_shader.vert
 /*
@@ -132,7 +130,7 @@ pub struct HalaImGui {
   vertex_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
   index_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
 
-  imgui: *mut ImGuiContext,
+  imgui: std::mem::ManuallyDrop<imgui::Context>,
 }
 
 /// The implementation of the drop trait for the ImGUI context.
@@ -143,9 +141,7 @@ impl Drop for HalaImGui {
     self.font_image = None;
 
     unsafe {
-      ImGui_DestroyContext(self.imgui);
-      self.imgui = null_mut();
-
+      std::mem::ManuallyDrop::drop(&mut self.imgui);
       std::mem::ManuallyDrop::drop(&mut self.pipeline);
       std::mem::ManuallyDrop::drop(&mut self.font_descriptor_set);
       std::mem::ManuallyDrop::drop(&mut self.font_descriptor_pool);
@@ -161,126 +157,133 @@ impl Drop for HalaImGui {
 /// The implementation of the ImGUI context.
 impl HalaImGui {
 
-  pub fn to_button(btncode: MouseButton) -> Option<ImGuiMouseButton> {
+  pub fn to_button(btncode: MouseButton) -> Option<imgui::MouseButton> {
     let btn = match btncode {
-      MouseButton::Left => ImGuiMouseButton_::ImGuiMouseButton_Left.0,
-      MouseButton::Right => ImGuiMouseButton_::ImGuiMouseButton_Right.0,
-      MouseButton::Middle => ImGuiMouseButton_::ImGuiMouseButton_Middle.0,
-      MouseButton::Other(x) if x < ImGuiMouseButton_::ImGuiMouseButton_COUNT.0 as u16 => {
-        ImGuiMouseButton_(x as i32).0
+      MouseButton::Left => imgui::MouseButton::Left,
+      MouseButton::Right => imgui::MouseButton::Right,
+      MouseButton::Middle => imgui::MouseButton::Middle,
+      MouseButton::Other(x) if x < imgui::MouseButton::COUNT as u16 => {
+        match x {
+          0 => imgui::MouseButton::Left,
+          1 => imgui::MouseButton::Right,
+          2 => imgui::MouseButton::Middle,
+          3 => imgui::MouseButton::Extra1,
+          4 => imgui::MouseButton::Extra2,
+          _ => return None,
+        }
       }
       _ => return None,
     };
     Some(btn)
   }
-  pub fn to_key(phys_key: PhysicalKey) -> Option<ImGuiKey> {
+  pub fn to_key(phys_key: PhysicalKey) -> Option<imgui::Key> {
     let key = match phys_key {
       PhysicalKey::Code(code) => match code {
-        KeyCode::Tab => ImGuiKey::ImGuiKey_Tab,
-        KeyCode::ArrowLeft => ImGuiKey::ImGuiKey_LeftArrow,
-        KeyCode::ArrowRight => ImGuiKey::ImGuiKey_RightArrow,
-        KeyCode::ArrowUp => ImGuiKey::ImGuiKey_UpArrow,
-        KeyCode::ArrowDown => ImGuiKey::ImGuiKey_DownArrow,
-        KeyCode::PageUp => ImGuiKey::ImGuiKey_PageUp,
-        KeyCode::PageDown => ImGuiKey::ImGuiKey_PageDown,
-        KeyCode::Home => ImGuiKey::ImGuiKey_Home,
-        KeyCode::End => ImGuiKey::ImGuiKey_End,
-        KeyCode::Insert => ImGuiKey::ImGuiKey_Insert,
-        KeyCode::Delete => ImGuiKey::ImGuiKey_Delete,
-        KeyCode::Backspace => ImGuiKey::ImGuiKey_Backspace,
-        KeyCode::Space => ImGuiKey::ImGuiKey_Space,
-        KeyCode::Enter => ImGuiKey::ImGuiKey_Enter,
-        KeyCode::Escape => ImGuiKey::ImGuiKey_Escape,
-        KeyCode::ControlLeft => ImGuiKey::ImGuiKey_LeftCtrl,
-        KeyCode::ShiftLeft => ImGuiKey::ImGuiKey_LeftShift,
-        KeyCode::AltLeft => ImGuiKey::ImGuiKey_LeftAlt,
-        KeyCode::SuperLeft => ImGuiKey::ImGuiKey_LeftSuper,
-        KeyCode::ControlRight => ImGuiKey::ImGuiKey_RightCtrl,
-        KeyCode::ShiftRight => ImGuiKey::ImGuiKey_RightShift,
-        KeyCode::AltRight => ImGuiKey::ImGuiKey_RightAlt,
-        KeyCode::SuperRight => ImGuiKey::ImGuiKey_RightSuper,
-        KeyCode::Digit0 => ImGuiKey::ImGuiKey_0,
-        KeyCode::Digit1 => ImGuiKey::ImGuiKey_1,
-        KeyCode::Digit2 => ImGuiKey::ImGuiKey_2,
-        KeyCode::Digit3 => ImGuiKey::ImGuiKey_3,
-        KeyCode::Digit4 => ImGuiKey::ImGuiKey_4,
-        KeyCode::Digit5 => ImGuiKey::ImGuiKey_5,
-        KeyCode::Digit6 => ImGuiKey::ImGuiKey_6,
-        KeyCode::Digit7 => ImGuiKey::ImGuiKey_7,
-        KeyCode::Digit8 => ImGuiKey::ImGuiKey_8,
-        KeyCode::Digit9 => ImGuiKey::ImGuiKey_9,
-        KeyCode::KeyA => ImGuiKey::ImGuiKey_A,
-        KeyCode::KeyB => ImGuiKey::ImGuiKey_B,
-        KeyCode::KeyC => ImGuiKey::ImGuiKey_C,
-        KeyCode::KeyD => ImGuiKey::ImGuiKey_D,
-        KeyCode::KeyE => ImGuiKey::ImGuiKey_E,
-        KeyCode::KeyF => ImGuiKey::ImGuiKey_F,
-        KeyCode::KeyG => ImGuiKey::ImGuiKey_G,
-        KeyCode::KeyH => ImGuiKey::ImGuiKey_H,
-        KeyCode::KeyI => ImGuiKey::ImGuiKey_I,
-        KeyCode::KeyJ => ImGuiKey::ImGuiKey_J,
-        KeyCode::KeyK => ImGuiKey::ImGuiKey_K,
-        KeyCode::KeyL => ImGuiKey::ImGuiKey_L,
-        KeyCode::KeyM => ImGuiKey::ImGuiKey_M,
-        KeyCode::KeyN => ImGuiKey::ImGuiKey_N,
-        KeyCode::KeyO => ImGuiKey::ImGuiKey_O,
-        KeyCode::KeyP => ImGuiKey::ImGuiKey_P,
-        KeyCode::KeyQ => ImGuiKey::ImGuiKey_Q,
-        KeyCode::KeyR => ImGuiKey::ImGuiKey_R,
-        KeyCode::KeyS => ImGuiKey::ImGuiKey_S,
-        KeyCode::KeyT => ImGuiKey::ImGuiKey_T,
-        KeyCode::KeyU => ImGuiKey::ImGuiKey_U,
-        KeyCode::KeyV => ImGuiKey::ImGuiKey_V,
-        KeyCode::KeyW => ImGuiKey::ImGuiKey_W,
-        KeyCode::KeyX => ImGuiKey::ImGuiKey_X,
-        KeyCode::KeyY => ImGuiKey::ImGuiKey_Y,
-        KeyCode::KeyZ => ImGuiKey::ImGuiKey_Z,
-        KeyCode::F1 => ImGuiKey::ImGuiKey_F1,
-        KeyCode::F2 => ImGuiKey::ImGuiKey_F2,
-        KeyCode::F3 => ImGuiKey::ImGuiKey_F3,
-        KeyCode::F4 => ImGuiKey::ImGuiKey_F4,
-        KeyCode::F5 => ImGuiKey::ImGuiKey_F5,
-        KeyCode::F6 => ImGuiKey::ImGuiKey_F6,
-        KeyCode::F7 => ImGuiKey::ImGuiKey_F7,
-        KeyCode::F8 => ImGuiKey::ImGuiKey_F8,
-        KeyCode::F9 => ImGuiKey::ImGuiKey_F9,
-        KeyCode::F10 => ImGuiKey::ImGuiKey_F10,
-        KeyCode::F11 => ImGuiKey::ImGuiKey_F11,
-        KeyCode::F12 => ImGuiKey::ImGuiKey_F12,
-        KeyCode::Quote => ImGuiKey::ImGuiKey_Apostrophe,
-        KeyCode::Comma => ImGuiKey::ImGuiKey_Comma,
-        KeyCode::Minus => ImGuiKey::ImGuiKey_Minus,
-        KeyCode::Period => ImGuiKey::ImGuiKey_Period,
-        KeyCode::Slash => ImGuiKey::ImGuiKey_Slash,
-        KeyCode::Semicolon => ImGuiKey::ImGuiKey_Semicolon,
-        KeyCode::Equal => ImGuiKey::ImGuiKey_Equal,
-        KeyCode::BracketLeft => ImGuiKey::ImGuiKey_LeftBracket,
-        KeyCode::Backslash => ImGuiKey::ImGuiKey_Backslash,
-        KeyCode::BracketRight => ImGuiKey::ImGuiKey_RightBracket,
-        KeyCode::Backquote => ImGuiKey::ImGuiKey_GraveAccent,
-        KeyCode::CapsLock => ImGuiKey::ImGuiKey_CapsLock,
-        KeyCode::ScrollLock => ImGuiKey::ImGuiKey_ScrollLock,
-        KeyCode::NumLock => ImGuiKey::ImGuiKey_NumLock,
-        KeyCode::PrintScreen => ImGuiKey::ImGuiKey_PrintScreen,
-        KeyCode::Pause => ImGuiKey::ImGuiKey_Pause,
-        KeyCode::Numpad0 => ImGuiKey::ImGuiKey_Keypad0,
-        KeyCode::Numpad1 => ImGuiKey::ImGuiKey_Keypad1,
-        KeyCode::Numpad2 => ImGuiKey::ImGuiKey_Keypad2,
-        KeyCode::Numpad3 => ImGuiKey::ImGuiKey_Keypad3,
-        KeyCode::Numpad4 => ImGuiKey::ImGuiKey_Keypad4,
-        KeyCode::Numpad5 => ImGuiKey::ImGuiKey_Keypad5,
-        KeyCode::Numpad6 => ImGuiKey::ImGuiKey_Keypad6,
-        KeyCode::Numpad7 => ImGuiKey::ImGuiKey_Keypad7,
-        KeyCode::Numpad8 => ImGuiKey::ImGuiKey_Keypad8,
-        KeyCode::Numpad9 => ImGuiKey::ImGuiKey_Keypad9,
-        KeyCode::NumpadDecimal => ImGuiKey::ImGuiKey_KeypadDecimal,
-        KeyCode::NumpadDivide => ImGuiKey::ImGuiKey_KeypadDivide,
-        KeyCode::NumpadMultiply => ImGuiKey::ImGuiKey_KeypadMultiply,
-        KeyCode::NumpadSubtract => ImGuiKey::ImGuiKey_KeypadSubtract,
-        KeyCode::NumpadAdd => ImGuiKey::ImGuiKey_KeypadAdd,
-        KeyCode::NumpadEnter => ImGuiKey::ImGuiKey_KeypadEnter,
-        KeyCode::NumpadEqual => ImGuiKey::ImGuiKey_KeypadEqual,
-        KeyCode::NumpadBackspace => ImGuiKey::ImGuiKey_Backspace,
+        KeyCode::Tab => imgui::Key::Tab,
+        KeyCode::ArrowLeft => imgui::Key::LeftArrow,
+        KeyCode::ArrowRight => imgui::Key::RightArrow,
+        KeyCode::ArrowUp => imgui::Key::UpArrow,
+        KeyCode::ArrowDown => imgui::Key::DownArrow,
+        KeyCode::PageUp => imgui::Key::PageUp,
+        KeyCode::PageDown => imgui::Key::PageDown,
+        KeyCode::Home => imgui::Key::Home,
+        KeyCode::End => imgui::Key::End,
+        KeyCode::Insert => imgui::Key::Insert,
+        KeyCode::Delete => imgui::Key::Delete,
+        KeyCode::Backspace => imgui::Key::Backspace,
+        KeyCode::Space => imgui::Key::Space,
+        KeyCode::Enter => imgui::Key::Enter,
+        KeyCode::Escape => imgui::Key::Escape,
+        KeyCode::ControlLeft => imgui::Key::LeftCtrl,
+        KeyCode::ShiftLeft => imgui::Key::LeftShift,
+        KeyCode::AltLeft => imgui::Key::LeftAlt,
+        KeyCode::SuperLeft => imgui::Key::LeftSuper,
+        KeyCode::ControlRight => imgui::Key::RightCtrl,
+        KeyCode::ShiftRight => imgui::Key::RightShift,
+        KeyCode::AltRight => imgui::Key::RightAlt,
+        KeyCode::SuperRight => imgui::Key::RightSuper,
+        KeyCode::Digit0 => imgui::Key::Alpha0,
+        KeyCode::Digit1 => imgui::Key::Alpha1,
+        KeyCode::Digit2 => imgui::Key::Alpha2,
+        KeyCode::Digit3 => imgui::Key::Alpha3,
+        KeyCode::Digit4 => imgui::Key::Alpha4,
+        KeyCode::Digit5 => imgui::Key::Alpha5,
+        KeyCode::Digit6 => imgui::Key::Alpha6,
+        KeyCode::Digit7 => imgui::Key::Alpha7,
+        KeyCode::Digit8 => imgui::Key::Alpha8,
+        KeyCode::Digit9 => imgui::Key::Alpha9,
+        KeyCode::KeyA => imgui::Key::A,
+        KeyCode::KeyB => imgui::Key::B,
+        KeyCode::KeyC => imgui::Key::C,
+        KeyCode::KeyD => imgui::Key::D,
+        KeyCode::KeyE => imgui::Key::E,
+        KeyCode::KeyF => imgui::Key::F,
+        KeyCode::KeyG => imgui::Key::G,
+        KeyCode::KeyH => imgui::Key::H,
+        KeyCode::KeyI => imgui::Key::I,
+        KeyCode::KeyJ => imgui::Key::J,
+        KeyCode::KeyK => imgui::Key::K,
+        KeyCode::KeyL => imgui::Key::L,
+        KeyCode::KeyM => imgui::Key::M,
+        KeyCode::KeyN => imgui::Key::N,
+        KeyCode::KeyO => imgui::Key::O,
+        KeyCode::KeyP => imgui::Key::P,
+        KeyCode::KeyQ => imgui::Key::Q,
+        KeyCode::KeyR => imgui::Key::R,
+        KeyCode::KeyS => imgui::Key::S,
+        KeyCode::KeyT => imgui::Key::T,
+        KeyCode::KeyU => imgui::Key::U,
+        KeyCode::KeyV => imgui::Key::V,
+        KeyCode::KeyW => imgui::Key::W,
+        KeyCode::KeyX => imgui::Key::X,
+        KeyCode::KeyY => imgui::Key::Y,
+        KeyCode::KeyZ => imgui::Key::Z,
+        KeyCode::F1 => imgui::Key::F1,
+        KeyCode::F2 => imgui::Key::F2,
+        KeyCode::F3 => imgui::Key::F3,
+        KeyCode::F4 => imgui::Key::F4,
+        KeyCode::F5 => imgui::Key::F5,
+        KeyCode::F6 => imgui::Key::F6,
+        KeyCode::F7 => imgui::Key::F7,
+        KeyCode::F8 => imgui::Key::F8,
+        KeyCode::F9 => imgui::Key::F9,
+        KeyCode::F10 => imgui::Key::F10,
+        KeyCode::F11 => imgui::Key::F11,
+        KeyCode::F12 => imgui::Key::F12,
+        KeyCode::Quote => imgui::Key::Apostrophe,
+        KeyCode::Comma => imgui::Key::Comma,
+        KeyCode::Minus => imgui::Key::Minus,
+        KeyCode::Period => imgui::Key::Period,
+        KeyCode::Slash => imgui::Key::Slash,
+        KeyCode::Semicolon => imgui::Key::Semicolon,
+        KeyCode::Equal => imgui::Key::Equal,
+        KeyCode::BracketLeft => imgui::Key::LeftBracket,
+        KeyCode::Backslash => imgui::Key::Backslash,
+        KeyCode::BracketRight => imgui::Key::RightBracket,
+        KeyCode::Backquote => imgui::Key::GraveAccent,
+        KeyCode::CapsLock => imgui::Key::CapsLock,
+        KeyCode::ScrollLock => imgui::Key::ScrollLock,
+        KeyCode::NumLock => imgui::Key::NumLock,
+        KeyCode::PrintScreen => imgui::Key::PrintScreen,
+        KeyCode::Pause => imgui::Key::Pause,
+        KeyCode::Numpad0 => imgui::Key::Keypad0,
+        KeyCode::Numpad1 => imgui::Key::Keypad1,
+        KeyCode::Numpad2 => imgui::Key::Keypad2,
+        KeyCode::Numpad3 => imgui::Key::Keypad3,
+        KeyCode::Numpad4 => imgui::Key::Keypad4,
+        KeyCode::Numpad5 => imgui::Key::Keypad5,
+        KeyCode::Numpad6 => imgui::Key::Keypad6,
+        KeyCode::Numpad7 => imgui::Key::Keypad7,
+        KeyCode::Numpad8 => imgui::Key::Keypad8,
+        KeyCode::Numpad9 => imgui::Key::Keypad9,
+        KeyCode::NumpadDecimal => imgui::Key::KeypadDecimal,
+        KeyCode::NumpadDivide => imgui::Key::KeypadDivide,
+        KeyCode::NumpadMultiply => imgui::Key::KeypadMultiply,
+        KeyCode::NumpadSubtract => imgui::Key::KeypadSubtract,
+        KeyCode::NumpadAdd => imgui::Key::KeypadAdd,
+        KeyCode::NumpadEnter => imgui::Key::KeypadEnter,
+        KeyCode::NumpadEqual => imgui::Key::KeypadEqual,
+        KeyCode::NumpadBackspace => imgui::Key::Backspace,
         _ => return None,
       },
       PhysicalKey::Unidentified(_) => return None,
@@ -436,21 +439,12 @@ impl HalaImGui {
     };
 
     // Initialize ImGUI.
-    let imgui = unsafe {
-      let imgui = ImGui_CreateContext(null_mut());
-      ImGui_StyleColorsDark(null_mut());
-      imgui
-    };
-
-    unsafe {
-      let io = ImGui_GetIO();
-      if !enable_ini {
-        (*io).IniFilename = null();
-      }
-      let conf_flags = ImGuiConfigFlags_::ImGuiConfigFlags_NavEnableKeyboard
-        | ImGuiConfigFlags_::ImGuiConfigFlags_NavEnableGamepad;
-      (*io).ConfigFlags = conf_flags.0;
-    };
+    let mut imgui = imgui::Context::create();
+    imgui.style_mut().use_dark_colors();
+    if !enable_ini {
+      imgui.set_ini_filename(None);
+    }
+    imgui.io_mut().config_flags = imgui::ConfigFlags::NAV_ENABLE_KEYBOARD | imgui::ConfigFlags::NAV_ENABLE_GAMEPAD;
 
     let mut vertex_buffers = Vec::with_capacity(num_of_images);
     vertex_buffers.resize_with(num_of_images, || None);
@@ -469,7 +463,7 @@ impl HalaImGui {
       font_image: None,
       vertex_buffers,
       index_buffers,
-      imgui,
+      imgui: std::mem::ManuallyDrop::new(imgui),
     })
   }
 
@@ -478,29 +472,26 @@ impl HalaImGui {
   /// param width: The width of the window.
   /// param height: The height of the window.
   /// return: The result.
-  pub fn begin_frame(&mut self, delta_time: f64, width: u32, height: u32) -> Result<()> {
-    unsafe {
-      let io = ImGui_GetIO();
-      (*io).DeltaTime = delta_time as f32;
-      (*io).DisplaySize = ImVec2 { x: width as f32, y: height as f32 };
-      (*io).DisplayFramebufferScale = ImVec2 { x: 1.0, y: 1.0 };
+  pub fn begin_frame<F>(&mut self, delta_time: f64, width: u32, height: u32, mut ui_fn: F) -> Result<()>
+    where F: FnMut(&mut imgui::Ui)
+  {
+    self.imgui.io_mut().delta_time = delta_time as f32;
+    self.imgui.io_mut().display_size = [width as f32, height as f32];
+    self.imgui.io_mut().display_framebuffer_scale = [1.0, 1.0];
 
-      if self.font_image.is_none() {
-        self.create_fonts_texture()?;
-      }
-
-      ImGui_NewFrame();
+    if self.font_image.is_none() {
+      self.create_fonts_texture()?;
     }
+
+    ui_fn(self.imgui.new_frame());
 
     Ok(())
   }
 
   /// End the ImGUI frame.
   /// return: The result.
-  pub fn end_frame(&self) -> Result<()> {
-    unsafe {
-      ImGui_Render();
-    }
+  pub fn end_frame(&mut self) -> Result<()> {
+    self.imgui.render();
 
     Ok(())
   }
@@ -511,27 +502,20 @@ impl HalaImGui {
   /// return: The result.
   pub fn draw(&mut self, index: usize, command_buffers: &hala_gfx::HalaCommandBufferSet) -> core::result::Result<(), hala_gfx::HalaGfxError> {
     // Get draw data.
-    let (
-      draw_data,
-      total_vtx_count,
-      total_idx_count,
-    ) = unsafe {
-      let draw_data = ImGui_GetDrawData();
-      let is_minimized = (*draw_data).DisplaySize.x <= 0.0 || (*draw_data).DisplaySize.y <= 0.0;
-      if !is_minimized {
-        (draw_data as *const ImDrawData, (*draw_data).TotalVtxCount, (*draw_data).TotalIdxCount)
-      } else {
-        (null(), 0, 0)
-      }
+    let draw_data = unsafe {
+      &*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
     };
-    if draw_data.is_null() || total_vtx_count == 0 || total_idx_count == 0 {
+    let is_minimized = draw_data.display_size[0] <= 0.0 || draw_data.display_size[1] <= 0.0;
+    let total_vtx_count = draw_data.total_vtx_count;
+    let total_idx_count = draw_data.total_idx_count;
+    if is_minimized || total_vtx_count == 0 || total_idx_count == 0 {
       return core::result::Result::Ok(());
     }
 
     let context = self.vk_ctx.borrow();
 
     // Create or resize the vertex/index buffers.
-    let vertex_buffer_size = total_vtx_count as u64 * std::mem::size_of::<ImDrawVert>() as u64;
+    let vertex_buffer_size = total_vtx_count as u64 * std::mem::size_of::<imgui::DrawVert>() as u64;
     let vertex_buffer = match self.vertex_buffers[index] {
       Some(ref buffer) if buffer.size >= vertex_buffer_size => buffer,
       _ => {
@@ -545,7 +529,7 @@ impl HalaImGui {
         self.vertex_buffers[index].as_ref().unwrap()
       },
     };
-    let index_buffer_size = total_idx_count as u64 * std::mem::size_of::<ImDrawIdx>() as u64;
+    let index_buffer_size = total_idx_count as u64 * std::mem::size_of::<imgui::DrawIdx>() as u64;
     let index_buffer = match self.index_buffers[index] {
       Some(ref buffer) if buffer.size >= index_buffer_size => buffer,
       _ => {
@@ -561,39 +545,32 @@ impl HalaImGui {
     };
 
     // Fill the vertex/index buffers.
-    unsafe {
-      let mut vtx_offset = 0;
-      let mut idx_offset = 0;
-      for n in 0..(*draw_data).CmdListsCount {
-        let cmd_list = (*draw_data).CmdLists[n as usize];
+    let mut vtx_offset = 0;
+    let mut idx_offset = 0;
+    for cmd_list in draw_data.draw_lists() {
+      let vtx_buffer = cmd_list.vtx_buffer();
+      let vtx_size = std::mem::size_of_val(vtx_buffer);
+      vertex_buffer.update_memory(
+        vtx_offset,
+        vtx_buffer
+      )?;
+      vtx_offset += vtx_size;
 
-        let vtx_size = (*cmd_list).VtxBuffer.Size as usize * std::mem::size_of::<ImDrawVert>();
-        vertex_buffer.update_memory_raw(
-          vtx_offset,
-          (*cmd_list).VtxBuffer.Data as *const u8,
-          vtx_size,
-        )?;
-        vtx_offset += vtx_size;
-
-        let idx_size = (*cmd_list).IdxBuffer.Size as usize * std::mem::size_of::<ImDrawIdx>();
-        index_buffer.update_memory_raw(
-          idx_offset,
-          (*cmd_list).IdxBuffer.Data as *const u8,
-          idx_size,
-        )?;
-        idx_offset += idx_size;
-      }
+      let idx_buffer = cmd_list.idx_buffer();
+      let idx_size = std::mem::size_of_val(idx_buffer);
+      index_buffer.update_memory(
+        idx_offset,
+        idx_buffer,
+      )?;
+      idx_offset += idx_size;
     }
 
     // Will project scissor/clipping rectangles into framebuffer space
-    let (clip_off, clip_scale, fb_size) = unsafe {
-      let io = ImGui_GetIO();
-      (
-        (*draw_data).DisplayPos,        // (0,0) unless using multi-viewports
-        (*draw_data).FramebufferScale,  // (1,1) unless using retina display which are often (2,2)
-        (*io).DisplaySize,
-      )
-    };
+    let (clip_off, clip_scale, fb_size) = (
+      draw_data.display_pos,        // (0,0) unless using multi-viewports
+      draw_data.framebuffer_scale,  // (1,1) unless using retina display which are often (2,2)
+      self.imgui.io().display_size,
+    );
 
     // Bind pipeline.
     command_buffers.bind_graphics_pipeline(index, &self.pipeline);
@@ -609,8 +586,8 @@ impl HalaImGui {
       &[(
         0.0,
         0.0,
-        fb_size.x,
-        fb_size.y,
+        fb_size[0],
+        fb_size[1],
         0.0,
         1.0,
       )],
@@ -619,12 +596,12 @@ impl HalaImGui {
     // Setup scale and translation:
     // Our visible imgui space lies from draw_data->DisplayPps (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
     let scale = [
-      2.0 / fb_size.x,
-      2.0 / fb_size.y,
+      2.0 / fb_size[0],
+      2.0 / fb_size[1],
     ];
     let translate = [
-      -1.0 - clip_off.x * scale[0],
-      -1.0 - clip_off.y * scale[1],
+      -1.0 - clip_off[0] * scale[0],
+      -1.0 - clip_off[1] * scale[1],
     ];
     command_buffers.push_constants_f32(
       index,
@@ -645,32 +622,32 @@ impl HalaImGui {
     unsafe {
       let mut vtx_offset = 0;
       let mut idx_offset = 0;
-      for n in 0..(*draw_data).CmdListsCount {
-        let cmd_list = (*draw_data).CmdLists[n as usize];
-        for cmd_i in 0..(*cmd_list).CmdBuffer.Size {
-          let cmd = &(*cmd_list).CmdBuffer[cmd_i as usize];
-
-          match cmd.UserCallback {
-            Some(cb) => {
-              cb(cmd_list, cmd);
+      for cmd_list in draw_data.draw_lists() {
+        for cmd in cmd_list.commands() {
+          match cmd {
+            imgui::DrawCmd::ResetRenderState => {
+              // TODO: Reset render state.
             },
-            None => {
+            imgui::DrawCmd::RawCallback { callback, raw_cmd } => {
+              callback(cmd_list.raw(), raw_cmd);
+            },
+            imgui::DrawCmd::Elements { count, cmd_params } => {
               // Project scissor/clipping rectangles into framebuffer space.
-              let mut clip_min = ImVec2 {
-                x: (cmd.ClipRect.x - clip_off.x) * clip_scale.x,
-                y: (cmd.ClipRect.y - clip_off.y) * clip_scale.y,
-              };
-              let mut clip_max = ImVec2 {
-                x: (cmd.ClipRect.z - clip_off.x) * clip_scale.x,
-                y: (cmd.ClipRect.w - clip_off.y) * clip_scale.y,
-              };
+              let mut clip_min = [
+                (cmd_params.clip_rect[0] - clip_off[0]) * clip_scale[0],
+                (cmd_params.clip_rect[1] - clip_off[1]) * clip_scale[1],
+              ];
+              let mut clip_max = [
+                (cmd_params.clip_rect[2] - clip_off[0]) * clip_scale[0],
+                (cmd_params.clip_rect[3] - clip_off[1]) * clip_scale[1],
+              ];
 
               // Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds.
-              if clip_min.x < 0.0 { clip_min.x = 0.0; }
-              if clip_min.y < 0.0 { clip_min.y = 0.0; }
-              if clip_max.x > fb_size.x { clip_max.x = fb_size.x; }
-              if clip_max.y > fb_size.y { clip_max.y = fb_size.y; }
-              if clip_max.x <= clip_min.x || clip_max.y <= clip_min.y {
+              if clip_min[0] < 0.0 { clip_min[0] = 0.0; }
+              if clip_min[1] < 0.0 { clip_min[1] = 0.0; }
+              if clip_max[0] > fb_size[0] { clip_max[0] = fb_size[0]; }
+              if clip_max[1] > fb_size[1] { clip_max[1] = fb_size[1]; }
+              if clip_max[0] <= clip_min[0] || clip_max[1] <= clip_min[1] {
                 continue;
               }
 
@@ -679,7 +656,7 @@ impl HalaImGui {
                 index,
                 0,
                 &[
-                  (clip_min.x as i32, clip_min.y as i32, (clip_max.x - clip_min.x) as u32, (clip_max.y - clip_min.y) as u32)
+                  (clip_min[0] as i32, clip_min[1] as i32, (clip_max[0] - clip_min[0]) as u32, (clip_max[1] - clip_min[1]) as u32)
                 ],
               );
 
@@ -695,18 +672,18 @@ impl HalaImGui {
               // Draw.
               command_buffers.draw_indexed(
                 index,
-                cmd.ElemCount,
+                count as u32,
                 1,
-                cmd.IdxOffset + idx_offset,
-                cmd.VtxOffset as i32 + vtx_offset,
+                cmd_params.idx_offset as u32 + idx_offset,
+                cmd_params.vtx_offset as i32 + vtx_offset,
                 0,
               );
             }
           }
         }
 
-        idx_offset += (*cmd_list).IdxBuffer.Size as u32;
-        vtx_offset += (*cmd_list).VtxBuffer.Size;
+        idx_offset += cmd_list.idx_buffer().len() as u32;
+        vtx_offset += cmd_list.vtx_buffer().len() as i32;
       }
     }
 
@@ -716,7 +693,7 @@ impl HalaImGui {
       index,
       0,
       &[
-        (0, 0, fb_size.x as u32, fb_size.y as u32)
+        (0, 0, fb_size[0] as u32, fb_size[1] as u32)
       ],
     );
 
@@ -727,113 +704,76 @@ impl HalaImGui {
   /// return: Whether any mouse button is down.
   pub fn is_any_mouse_down(&self) -> bool {
     unsafe {
-      ImGui_IsAnyMouseDown()
+      imgui::sys::igIsAnyMouseDown()
     }
   }
 
   /// Get the display scale.
   /// return: The display scale.
-  pub fn get_display_framebuffer_scale(&self) -> (f32, f32) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ((*io).DisplayFramebufferScale.x, (*io).DisplayFramebufferScale.y)
-    }
+  pub fn get_display_framebuffer_scale(&self) -> [f32; 2] {
+    self.imgui.io().display_framebuffer_scale
   }
 
   /// Get font size.
   /// return: The font size.
   pub fn get_font_size(&self) -> f32 {
     unsafe {
-      ImGui_GetFontSize()
+      imgui::sys::igGetFontSize()
     }
   }
 
   /// Add a key event.
   /// param key: The key.
   /// param is_down: Whether the key is down.
-  pub fn add_key_event(&self, key: ImGuiKey, is_down: bool) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddKeyEvent(io, key, is_down)
-    }
+  pub fn add_key_event(&mut self, key: imgui::Key, is_down: bool) {
+    self.imgui.io_mut().add_key_event(key, is_down)
   }
 
   /// Add a input character.
   /// param char: The character.
-  pub fn add_input_character(&self, char: u32) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddInputCharacter(io, char)
-    }
+  pub fn add_input_character(&mut self, char: u32) {
+    self.imgui.io_mut().add_input_character(char::from_u32(char).unwrap())
   }
 
   /// Add a focus event.
   /// param is_focused: Whether the window is focused.
-  pub fn add_focus_event(&self, is_focused: bool) {
+  pub fn add_focus_event(&mut self, is_focused: bool) {
     unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddFocusEvent(io, is_focused)
+      let io = self.imgui.io_mut().raw_mut();
+      imgui::sys::ImGuiIO_AddFocusEvent(io, is_focused)
     }
   }
 
   /// Add a mouse position event.
   /// param x: The x position.
   /// param y: The y position.
-  pub fn add_mouse_pos_event(&self, x: f32, y: f32) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddMousePosEvent(io, x, y)
-    }
+  pub fn add_mouse_pos_event(&mut self, x: f32, y: f32) {
+    self.imgui.io_mut().add_mouse_pos_event([x, y])
   }
 
   /// Add a mouse button event.
   /// param button: The button.
   /// param is_down: Whether the button is down.
-  pub fn add_mouse_button_event(&self, button: ImGuiMouseButton, is_down: bool) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddMouseButtonEvent(io, button, is_down)
-    }
+  pub fn add_mouse_button_event(&mut self, button: imgui::MouseButton, is_down: bool) {
+    self.imgui.io_mut().add_mouse_button_event(button, is_down)
   }
 
   /// Add a mouse wheel event.
   /// param h: The horizontal delta value.
   /// param v: The vertical delta value.
-  pub fn add_mouse_wheel_event(&self, h: f32, v: f32) {
-    unsafe {
-      let io = ImGui_GetIO();
-      ImGuiIO_AddMouseWheelEvent(io, h, v)
-    }
+  pub fn add_mouse_wheel_event(&mut self, h: f32, v: f32) {
+    self.imgui.io_mut().add_mouse_wheel_event([h, v])
   }
 
   /// Create the fonts texture.
   fn create_fonts_texture(&mut self) -> Result<()> {
     let context = self.vk_ctx.borrow();
 
-    let (
-      upload_size,
-      width,
-      height,
-      pixels,
-     ) = unsafe {
-      let io = ImGui_GetIO();
-      let mut pixels: *mut u8 = null_mut();
-      let mut width: i32 = 0;
-      let mut height: i32 = 0;
-      let mut bytes_per_pixel: i32 = 0;
-      ImFontAtlas_GetTexDataAsRGBA32(
-        (*io).Fonts,
-        &mut pixels,
-        &mut width,
-        &mut height,
-        &mut bytes_per_pixel);
-      (
-        (width * height * bytes_per_pixel) as u64,
-        width as u32,
-        height as u32,
-        pixels,
-      )
-    };
+    let font_texture = self.imgui.fonts().build_rgba32_texture();
+    let upload_size = font_texture.data.len();
+    let width = font_texture.width;
+    let height = font_texture.height;
+    let pixels = font_texture.data;
 
     // Create image.
     let font_image = hala_gfx::HalaImage::new_2d(
@@ -849,7 +789,7 @@ impl HalaImGui {
     )?;
     let upload_buffer = hala_gfx::HalaBuffer::new(
       Rc::clone(&context.logical_device),
-      upload_size,
+      upload_size as u64,
       hala_gfx::HalaBufferUsageFlags::TRANSFER_SRC,
       hala_gfx::HalaMemoryLocation::CpuToGpu,
       "imgui_font_upload.buffer",
@@ -863,9 +803,8 @@ impl HalaImGui {
       1,
       "imgui_font.cmdbuf",
     )?;
-    font_image.update_gpu_memory_with_buffer_raw(
+    font_image.update_gpu_memory_with_buffer(
       pixels,
-      upload_size as usize,
       hala_gfx::HalaPipelineStageFlags2::FRAGMENT_SHADER
         | hala_gfx::HalaPipelineStageFlags2::TRANSFER,
       &upload_buffer,
@@ -882,13 +821,6 @@ impl HalaImGui {
     );
 
     self.font_image = Some(font_image);
-
-    // Store identifier.
-    unsafe {
-      let io = ImGui_GetIO();
-
-      (*(*io).Fonts).TexID = self.font_descriptor_set.handle(0) as ImTextureID;
-    }
 
     Ok(())
   }
