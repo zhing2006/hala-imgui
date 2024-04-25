@@ -283,6 +283,7 @@ impl HalaImGui {
         (1.0, hala_gfx::HalaFrontFace::COUNTER_CLOCKWISE, hala_gfx::HalaCullModeFlags::NONE, hala_gfx::HalaPolygonMode::FILL),
         (false, false, hala_gfx::HalaCompareOp::NEVER),
         &[&vert_shader, &frag_shader],
+        &[hala_gfx::HalaDynamicState::VIEWPORT, hala_gfx::HalaDynamicState::SCISSOR],
         None,
         "imgui.pipeline",
       )?;
@@ -441,10 +442,6 @@ impl HalaImGui {
       }
     }
 
-    command_buffers.bind_graphics_pipeline(index, &self.pipeline);
-    command_buffers.bind_vertex_buffers(index, 0, &[vertex_buffer], &[0]);
-    command_buffers.bind_index_buffers(index, &[index_buffer], &[0], hala_gfx::HalaIndexType::UINT16);
-
     // Will project scissor/clipping rectangles into framebuffer space
     let (clip_off, clip_scale, fb_size) = unsafe {
       let io = ImGui_GetIO();
@@ -454,6 +451,52 @@ impl HalaImGui {
         (*io).DisplaySize,
       )
     };
+
+    // Bind pipeline.
+    command_buffers.bind_graphics_pipeline(index, &self.pipeline);
+
+    // Bind vertex/index buffers.
+    command_buffers.bind_vertex_buffers(index, 0, &[vertex_buffer], &[0]);
+    command_buffers.bind_index_buffers(index, &[index_buffer], &[0], hala_gfx::HalaIndexType::UINT16);
+
+    // Set viewport.
+    command_buffers.set_viewport(
+      index,
+      0,
+      &[(
+        0.0,
+        0.0,
+        fb_size.x,
+        fb_size.y,
+        0.0,
+        1.0,
+      )],
+    );
+
+    // Setup scale and translation:
+    // Our visible imgui space lies from draw_data->DisplayPps (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
+    let scale = [
+      2.0 / fb_size.x,
+      2.0 / fb_size.y,
+    ];
+    let translate = [
+      -1.0 - clip_off.x * scale[0],
+      -1.0 - clip_off.y * scale[1],
+    ];
+    command_buffers.push_constants_f32(
+      index,
+      &self.pipeline,
+      hala_gfx::HalaShaderStageFlags::VERTEX,
+      0,
+      &scale,
+    );
+    command_buffers.push_constants_f32(
+      index,
+      &self.pipeline,
+      hala_gfx::HalaShaderStageFlags::VERTEX,
+      std::mem::size_of_val(&scale) as u32,
+      &translate,
+    );
 
     // Render command list.
     unsafe {
@@ -488,20 +531,6 @@ impl HalaImGui {
                 continue;
               }
 
-              // Set viewport.
-              command_buffers.set_viewport(
-                index,
-                0,
-                &[(
-                  clip_min.x,
-                  clip_min.y,
-                  clip_max.x - clip_min.x,
-                  clip_max.y - clip_min.y,
-                  0.0,
-                  1.0,
-                )],
-              );
-
               // Apply scissor/clipping rectangle.
               command_buffers.set_scissor(
                 index,
@@ -520,26 +549,7 @@ impl HalaImGui {
                 &[],
               );
 
-              // Push constants.
-              let constant = (
-                clip_scale.x,
-                clip_scale.y,
-                clip_off.x,
-                clip_off.y,
-              );
-              let bytes: &[u8] = {
-                let ptr = &constant as *const _ as *const u8;
-                std::slice::from_raw_parts(ptr, std::mem::size_of_val(&constant))
-              };
-              command_buffers.push_constants(
-                index,
-                &self.pipeline,
-                hala_gfx::HalaShaderStageFlags::VERTEX,
-                0,
-                bytes,
-              );
-
-              // TODO: Draw.
+              // Draw.
               command_buffers.draw_indexed(
                 index,
                 cmd.ElemCount,
