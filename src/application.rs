@@ -135,13 +135,7 @@ pub trait HalaApplication {
       elwt.set_control_flow(ControlFlow::Poll);
       match event {
         Event::AboutToWait => {
-          let imgui = self.get_imgui();
-          match imgui {
-            Some(imgui) if !imgui.is_any_mouse_down() => {
-              window.request_redraw();
-            },
-            _ => ()
-          }
+          window.request_redraw();
         }
         Event::WindowEvent {
           event,
