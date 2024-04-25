@@ -1,7 +1,8 @@
 use std::{
-  ptr::null_mut,
-  rc::Rc,
   cell::RefCell,
+  ffi::CString,
+  ptr::null_mut,
+  rc::Rc
 };
 
 use anyhow::Result;
@@ -211,15 +212,17 @@ impl HelloWorldApp {
     }
   }
 
+  /// Draw the user interface.
   fn ui(&mut self) {
+    let text: CString = CString::new("Hello, World!").unwrap();
     unsafe {
       ImGui_Begin(
-        "Hello, World!".as_ptr() as *const i8,
+        text.as_ptr(),
         null_mut(),
         ImGuiWindowFlags_::ImGuiWindowFlags_None.0
       );
 
-      ImGui_Text("Hello, World!".as_ptr() as *const i8);
+      ImGui_Text(text.as_ptr());
 
       ImGui_End();
     }

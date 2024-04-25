@@ -427,18 +427,22 @@ impl HalaImGui {
       let mut idx_offset = 0;
       for n in 0..(*draw_data).CmdListsCount {
         let cmd_list = (*draw_data).CmdLists[n as usize];
+
+        let vtx_size = (*cmd_list).VtxBuffer.Size as usize * std::mem::size_of::<ImDrawVert>();
         vertex_buffer.update_memory_raw(
           vtx_offset,
           (*cmd_list).VtxBuffer.Data as *const u8,
-          (*cmd_list).VtxBuffer.Size as usize,
+          vtx_size,
         )?;
-        vtx_offset += (*cmd_list).VtxBuffer.Size as usize;
+        vtx_offset += vtx_size;
+
+        let idx_size = (*cmd_list).IdxBuffer.Size as usize * std::mem::size_of::<ImDrawIdx>();
         index_buffer.update_memory_raw(
           idx_offset,
           (*cmd_list).IdxBuffer.Data as *const u8,
-          (*cmd_list).IdxBuffer.Size as usize,
+          idx_size,
         )?;
-        idx_offset += (*cmd_list).IdxBuffer.Size as usize;
+        idx_offset += idx_size;
       }
     }
 
