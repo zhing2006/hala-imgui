@@ -1,8 +1,7 @@
 use std::{
+  rc::Rc,
   cell::RefCell,
-  ffi::CString,
   ptr::null_mut,
-  rc::Rc
 };
 
 use anyhow::Result;
@@ -110,6 +109,8 @@ impl HelloWorldRenderer {
 struct HelloWorldApp {
   renderer: Option<HelloWorldRenderer>,
   imgui: Option<hala_imgui::HalaImGui>,
+
+  show_text: bool,
 }
 
 /// The implementation of the application trait for the hello world application.
@@ -162,7 +163,8 @@ impl HalaApplication for HelloWorldApp {
       window
     )?;
     self.imgui = Some(HalaImGui::new(
-      Rc::clone(&(*renderer.context))
+      Rc::clone(&(*renderer.context)),
+      false,
     )?);
     self.renderer = Some(renderer);
 
@@ -216,20 +218,27 @@ impl HelloWorldApp {
     Self {
       renderer: None,
       imgui: None,
+      show_text: true,
     }
   }
 
   /// Draw the user interface.
   fn ui(&mut self) {
-    let text: CString = CString::new("Hello, World!").unwrap();
     unsafe {
+      ImGui_SetNextWindowPos(&ImVec2 { x: 10.0, y: 10.0 }, ImGuiCond_::ImGuiCond_None.0, &ImVec2 { x: 0.0, y: 0.0 });
       ImGui_Begin(
-        text.as_ptr(),
+        "Hello, World!\0".as_ptr() as *const i8,
         null_mut(),
         ImGuiWindowFlags_::ImGuiWindowFlags_None.0
       );
 
-      ImGui_Text(text.as_ptr());
+      if ImGui_Button("Click Me!\0".as_ptr() as *const i8, &ImVec2 { x: 100.0, y: 20.0 }) {
+        self.show_text = !self.show_text;
+      }
+
+      if self.show_text {
+        ImGui_Text("Hello, World!\0".as_ptr() as *const i8);
+      }
 
       ImGui_End();
     }

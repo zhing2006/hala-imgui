@@ -289,7 +289,10 @@ impl HalaImGui {
   }
 
   /// Create a new ImGUI context.
-  pub fn new(vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>) -> Result<Self> {
+  /// param vk_ctx The Vulkan context.
+  /// param enable_ini Whether to enable the INI file.
+  /// return The result of the creation.
+  pub fn new(vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>, enable_ini: bool) -> Result<Self> {
     let (
       vert_shader,
       frag_shader,
@@ -441,6 +444,9 @@ impl HalaImGui {
 
     unsafe {
       let io = ImGui_GetIO();
+      if !enable_ini {
+        (*io).IniFilename = null();
+      }
       let conf_flags = ImGuiConfigFlags_::ImGuiConfigFlags_NavEnableKeyboard
         | ImGuiConfigFlags_::ImGuiConfigFlags_NavEnableGamepad;
       (*io).ConfigFlags = conf_flags.0;
