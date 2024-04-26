@@ -503,7 +503,11 @@ impl HalaImGui {
   pub fn draw(&mut self, index: usize, command_buffers: &hala_gfx::HalaCommandBufferSet) -> core::result::Result<(), hala_gfx::HalaGfxError> {
     // Get draw data.
     let draw_data = unsafe {
-      &*(imgui::sys::igGetDrawData() as *mut imgui::DrawData)
+      let draw_data = imgui::sys::igGetDrawData() as *mut imgui::DrawData;
+      if draw_data.is_null() {
+        return core::result::Result::Ok(());
+      }
+      &*draw_data
     };
     let is_minimized = draw_data.display_size[0] <= 0.0 || draw_data.display_size[1] <= 0.0;
     let total_vtx_count = draw_data.total_vtx_count;
