@@ -26,6 +26,6 @@ log4rs = {version = "1", default-features = false, features = [
 ]}
 
 [dependencies.image]
-version = "0.24"
+version = "0.25"
 default-features = false
 features = ["jpeg", "png", "pnm", "tga", "hdr", "exr"]
