@@ -379,6 +379,7 @@ impl HalaImGui {
         Rc::clone(&context.logical_device),
         &context.swapchain,
         &[&font_descriptor_set.layout],
+        hala_gfx::HalaPipelineCreateFlags::default(),
         &[
           // Position.
           hala_gfx::HalaVertexInputAttributeDescription {
