@@ -360,13 +360,13 @@ impl HalaImGui {
         hala_gfx::HalaDescriptorSetLayout::new(
           Rc::clone(&context.logical_device),
           &[
-            (
-              0,
-              hala_gfx::HalaDescriptorType::COMBINED_IMAGE_SAMPLER,
-              1,
-              hala_gfx::HalaShaderStageFlags::FRAGMENT,
-              hala_gfx::HalaDescriptorBindingFlags::PARTIALLY_BOUND,
-            ),
+            hala_gfx::HalaDescriptorSetLayoutBinding {
+              binding_index: 0,
+              descriptor_type: hala_gfx::HalaDescriptorType::COMBINED_IMAGE_SAMPLER,
+              descriptor_count: 1,
+              stage_flags: hala_gfx::HalaShaderStageFlags::FRAGMENT,
+              binding_flags: hala_gfx::HalaDescriptorBindingFlags::PARTIALLY_BOUND,
+            },
           ],
           "imgui_font.descsetlayout",
         )?,
