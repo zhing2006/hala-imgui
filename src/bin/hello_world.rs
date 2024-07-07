@@ -78,7 +78,9 @@ impl HelloWorldRenderer {
     self.context.borrow().record_graphics_command_buffer(
       self.image_index,
       &self.graphics_command_buffers,
-      Some(([25.0 / 255.0, 118.0 / 255.0, 210.0 / 255.0, 1.0], 1.0, 0)),
+      Some([25.0 / 255.0, 118.0 / 255.0, 210.0 / 255.0, 1.0]),
+      Some(1.0),
+      Some(0),
       |index, command_buffers| {
         ui_fn(index, command_buffers)?;
 
