@@ -315,7 +315,7 @@ impl HalaImGui {
         vert_code,
         hala_gfx::HalaShaderStageFlags::VERTEX,
         hala_gfx::HalaRayTracingShaderGroupType::GENERAL,
-        "imgui.vert",
+        "imgui.vert.spv",
       )?;
 
       let frag_code = unsafe {
@@ -326,7 +326,7 @@ impl HalaImGui {
         frag_code,
         hala_gfx::HalaShaderStageFlags::FRAGMENT,
         hala_gfx::HalaRayTracingShaderGroupType::GENERAL,
-        "imgui.frag",
+        "imgui.frag.spv",
       )?;
 
       let font_sampler = hala_gfx::HalaSampler::new(
