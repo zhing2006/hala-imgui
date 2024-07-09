@@ -370,7 +370,6 @@ impl HalaImGui {
           ],
           "imgui_font.descsetlayout",
         )?,
-        1,
         0,
         "imgui_font.descset",
       )?;
@@ -611,14 +610,14 @@ impl HalaImGui {
     ];
     command_buffers.push_constants_f32(
       index,
-      &self.pipeline,
+      self.pipeline.layout,
       hala_gfx::HalaShaderStageFlags::VERTEX,
       0,
       &scale,
     );
     command_buffers.push_constants_f32(
       index,
-      &self.pipeline,
+      self.pipeline.layout,
       hala_gfx::HalaShaderStageFlags::VERTEX,
       std::mem::size_of_val(&scale) as u32,
       &translate,
