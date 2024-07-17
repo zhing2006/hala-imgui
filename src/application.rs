@@ -67,6 +67,35 @@ pub trait HalaApplication {
   /// return: The result.
   fn render(&mut self) -> Result<()>;
 
+  /// Handle the keyboard event.
+  /// param key: The key.
+  /// param is_pressed: The key is pressed or not.
+  /// return: The result.
+  fn on_keyboard_event(&mut self, _key: winit::keyboard::KeyCode, _is_pressed: bool) -> Result<()> {
+    Ok(())
+  }
+  /// Handle the mouse button event.
+  /// param button: The button.
+  /// param is_pressed: The button is pressed or not.
+  /// return: The result.
+  fn on_mouse_button_event(&mut self, _button: winit::event::MouseButton, _is_pressed: bool) -> Result<()> {
+    Ok(())
+  }
+  /// Handle the mouse cursor move event.
+  /// param x: The x position.
+  /// param y: The y position.
+  /// return: The result.
+  fn on_mouse_cursor_event(&mut self, _x: f32, _y: f32) -> Result<()> {
+    Ok(())
+  }
+  /// Handle the mouse wheel event.
+  /// param h: The horizontal value.
+  /// param v: The vertical value.
+  /// return: The result.
+  fn on_mouse_wheel_event(&mut self, _h: f32, _v: f32) -> Result<()> {
+    Ok(())
+  }
+
   /// Initialize the log system.
   fn init_log(&self) -> Result<()> where Self: Sized {
     let console_pattern_encoder = Box::new(
@@ -184,6 +213,7 @@ pub trait HalaApplication {
             is_synthetic: false,
             ..
           } => {
+            let mut is_ui_processed = false;
             let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               let is_pressed = state == winit::event::ElementState::Pressed;
@@ -210,6 +240,18 @@ pub trait HalaApplication {
                   }
                 }
               }
+              is_ui_processed = imgui.want_capture_keyboard();
+            }
+            if !is_ui_processed {
+              if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
+                match self.on_keyboard_event(keycode, state == winit::event::ElementState::Pressed) {
+                  Ok(_) => (),
+                  Err(e) => {
+                    log::error!("Failed to handle keyboard event: {}", e);
+                    elwt.exit()
+                  },
+                }
+              }
             }
           },
           WindowEvent::Ime(Ime::Commit(text)) => {
@@ -224,17 +266,43 @@ pub trait HalaApplication {
             position,
             ..
           } => {
+            let mut is_ui_processed = false;
+            let mut x: f32 = 0.0;
+            let mut y: f32 = 0.0;
             let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               let scale = window.scale_factor();
               let position = position.to_logical::<f32>(scale);
-              imgui.add_mouse_pos_event(position.x, position.y);
+              x = position.x;
+              y = position.y;
+              imgui.add_mouse_pos_event(x, y);
+              is_ui_processed = imgui.want_capture_mouse();
+            }
+            if !is_ui_processed {
+              match self.on_mouse_cursor_event(x, y) {
+                Ok(_) => (),
+                Err(e) => {
+                  log::error!("Failed to handle mouse move event: {}", e);
+                  elwt.exit()
+                },
+              }
             }
           },
           WindowEvent::CursorLeft { .. } => {
+            let mut is_ui_processed = false;
             let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               imgui.add_mouse_pos_event(f32::MAX, f32::MAX);
+              is_ui_processed = imgui.want_capture_mouse();
+            }
+            if !is_ui_processed {
+              match self.on_mouse_cursor_event(f32::MAX, f32::MAX) {
+                Ok(_) => (),
+                Err(e) => {
+                  log::error!("Failed to handle mouse move event: {}", e);
+                  elwt.exit()
+                },
+              }
             }
           },
           WindowEvent::MouseInput {
@@ -242,11 +310,22 @@ pub trait HalaApplication {
             button,
             ..
           } => {
+            let mut is_ui_processed = false;
             let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
               if let Some(button) = HalaImGui::to_button(button) {
                 let is_pressed = state == winit::event::ElementState::Pressed;
                 imgui.add_mouse_button_event(button, is_pressed);
+                is_ui_processed = imgui.want_capture_mouse();
+              }
+            }
+            if !is_ui_processed {
+              match self.on_mouse_button_event(button, state == winit::event::ElementState::Pressed) {
+                Ok(_) => (),
+                Err(e) => {
+                  log::error!("Failed to handle mouse button event: {}", e);
+                  elwt.exit()
+                },
               }
             }
           },
@@ -255,9 +334,12 @@ pub trait HalaApplication {
             phase: winit::event::TouchPhase::Moved,
             ..
           } => {
+            let mut is_ui_processed = false;
+            let mut h: f32 = 0.0;
+            let mut v: f32 = 0.0;
             let imgui = self.get_imgui_mut();
             if let Some(imgui) = imgui {
-              let (h, v) = match delta {
+              (h, v) = match delta {
                 winit::event::MouseScrollDelta::LineDelta(h, v) => (h, v),
                 winit::event::MouseScrollDelta::PixelDelta(pos) => {
                   let scale = imgui.get_display_framebuffer_scale();
@@ -267,6 +349,16 @@ pub trait HalaApplication {
                 },
               };
               imgui.add_mouse_wheel_event(h, v);
+              is_ui_processed = imgui.want_capture_mouse();
+            }
+            if !is_ui_processed {
+              match self.on_mouse_wheel_event(h, v) {
+                Ok(_) => (),
+                Err(e) => {
+                  log::error!("Failed to handle mouse wheel event: {}", e);
+                  elwt.exit()
+                },
+              }
             }
           },
           WindowEvent::Focused(is_focused) => {

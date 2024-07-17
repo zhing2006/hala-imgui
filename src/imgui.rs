@@ -468,6 +468,18 @@ impl HalaImGui {
     })
   }
 
+  /// Whether the imgui wants to capture the mouse.
+  /// When true, imgui will use the mouse inputs, so do not dispatch them to your main
+  pub fn want_capture_mouse(&self) -> bool {
+    self.imgui.io().want_capture_mouse
+  }
+
+  /// Whether the imgui wants to capture the keyboard.
+  /// When true, imgui will use the keyboard inputs, so do not dispatch them to your main
+  pub fn want_capture_keyboard(&self) -> bool {
+    self.imgui.io().want_capture_keyboard
+  }
+
   /// Begin the ImGUI frame.
   /// param delta_time: The delta time.
   /// param width: The width of the window.
