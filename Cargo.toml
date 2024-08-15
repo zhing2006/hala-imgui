@@ -12,9 +12,9 @@ bench = false
 hala-gfx = {path = "../hala-gfx"}
 anyhow = {version = "1", default-features = false, features = ["backtrace", "std"]}
 thiserror = {version = "1",  default-features = false}
-log = {version = "0", default-features = false}
+log = {version = "0.4", default-features = false}
 winit = {version = "0.29", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"]}
-imgui = {version = "0", default-features = false}
+imgui = {version = "0.12", default-features = false}
 log4rs = {version = "1", default-features = false, features = [
     "gzip",
     "console_appender",
