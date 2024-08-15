@@ -420,6 +420,7 @@ impl HalaImGui {
         &hala_gfx::HalaBlendState::new(hala_gfx::HalaBlendFactor::SRC_ALPHA, hala_gfx::HalaBlendFactor::ONE_MINUS_SRC_ALPHA, hala_gfx::HalaBlendOp::ADD),
         &hala_gfx::HalaBlendState::new(hala_gfx::HalaBlendFactor::ONE, hala_gfx::HalaBlendFactor::ONE_MINUS_SRC_ALPHA, hala_gfx::HalaBlendOp::ADD),
         &hala_gfx::HalaRasterizerState::new(hala_gfx::HalaFrontFace::COUNTER_CLOCKWISE, hala_gfx::HalaCullModeFlags::NONE, hala_gfx::HalaPolygonMode::FILL, 1.0),
+        &hala_gfx::HalaMultisampleState::new(context.multisample_count, false, 0.0, &[], false, false),
         &hala_gfx::HalaDepthState::new(false, false, hala_gfx::HalaCompareOp::NEVER),
         None,
         &[&vert_shader, &frag_shader],
