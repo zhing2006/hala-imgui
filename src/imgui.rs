@@ -610,6 +610,13 @@ impl HalaImGui {
         1.0,
       )],
     );
+    command_buffers.set_scissor(
+      index,
+      0,
+      &[
+        (0, 0, fb_size[0] as u32, fb_size[1] as u32),
+      ],
+    );
 
     // Setup scale and translation:
     // Our visible imgui space lies from draw_data->DisplayPps (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right). DisplayPos is (0,0) for single viewport apps.
