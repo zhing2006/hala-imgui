@@ -487,7 +487,7 @@ impl HalaImGui {
   /// param height: The height of the window.
   /// return: The result.
   pub fn begin_frame<F>(&mut self, delta_time: f64, width: u32, height: u32, mut ui_fn: F) -> Result<()>
-    where F: FnMut(&mut imgui::Ui)
+    where F: FnMut(&mut imgui::Ui) -> Result<()>
   {
     self.imgui.io_mut().delta_time = delta_time as f32;
     self.imgui.io_mut().display_size = [width as f32, height as f32];
@@ -497,7 +497,7 @@ impl HalaImGui {
       self.create_fonts_texture()?;
     }
 
-    ui_fn(self.imgui.new_frame());
+    ui_fn(self.imgui.new_frame())?;
 
     Ok(())
   }
