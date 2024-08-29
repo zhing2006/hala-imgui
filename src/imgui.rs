@@ -832,6 +832,8 @@ impl HalaImGui {
       pixels,
       hala_gfx::HalaPipelineStageFlags2::FRAGMENT_SHADER
         | hala_gfx::HalaPipelineStageFlags2::TRANSFER,
+      hala_gfx::HalaAccessFlags2::SHADER_READ,
+      hala_gfx::HalaImageLayout::SHADER_READ_ONLY_OPTIMAL,
       &upload_buffer,
       &font_command_buffers,
     )?;
