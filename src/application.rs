@@ -8,15 +8,16 @@ use log4rs::append::rolling_file::RollingFileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 
 use winit::{
-  event::{Event, WindowEvent, Ime},
-  event_loop::{ControlFlow, EventLoop},
-  window::{WindowBuilder, WindowButtons},
+  application::ApplicationHandler,
+  event::{WindowEvent, Ime},
+  event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+  window::{WindowButtons, Window, WindowId},
 };
 
 use crate::HalaImGui;
 
-/// The application trait.
-pub trait HalaApplication {
+/// The application context trait.
+pub trait HalaApplicationContextTrait {
 
   /// Get the file log format string.
   /// return: The format string.
@@ -141,237 +142,275 @@ pub trait HalaApplication {
     Ok(())
   }
 
-  /// Run the application.
-  /// return: The result of the running.
-  fn run(&mut self) -> Result<()> where Self: Sized {
-    let event_loop = EventLoop::new()?;
-    let win_size = self.get_window_size();
-    let window = WindowBuilder::new()
-      .with_title(self.get_window_title())
+}
+
+/// The application struct.
+pub struct HalaApplication {
+  pub context: Box<dyn HalaApplicationContextTrait>,
+  window: Option<Window>,
+  last_time: std::time::Instant,
+}
+
+/// Implement the ApplicationHandler trait for the HalaApplication struct.
+impl ApplicationHandler for HalaApplication {
+
+  /// Emitted when the event loop is about to block and wait for new events.
+  fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    let window = self.window.as_ref().unwrap();
+    window.request_redraw();
+  }
+
+  /// Emitted when the application has been resumed.
+  /// param event_loop: The event loop that the application is running on.
+  fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    let win_size = self.context.get_window_size();
+    let win_attr = Window::default_attributes()
+      .with_title(self.context.get_window_title())
       .with_inner_size(win_size)
       .with_resizable(false)
-      .with_enabled_buttons(WindowButtons::CLOSE)
-      .build(&event_loop)?;
-    log::debug!("Create window \"{}\" with size {}x{}.", self.get_window_title(), win_size.width, win_size.height);
+      .with_enabled_buttons(WindowButtons::CLOSE);
+    self.window = Some(event_loop.create_window(win_attr).unwrap());
 
-    self.before_run(win_size.width, win_size.height, &window)?;
+    log::debug!("Create window \"{}\" with size {}x{}.", self.context.get_window_title(), win_size.width, win_size.height);
 
-    let mut last_time = std::time::Instant::now();
+    // NOTICE: We only run on the platform that not support suspend/resume.
+    // So here is safe to call before_run.
+    self.context.before_run(win_size.width, win_size.height, self.window.as_ref().unwrap()).unwrap();
 
-    event_loop.run(move |event, elwt| {
-      elwt.set_control_flow(ControlFlow::Poll);
-      match event {
-        Event::AboutToWait => {
-          window.request_redraw();
-        }
-        Event::WindowEvent {
-          event,
-          window_id,
-        } => match event {
-          WindowEvent::CloseRequested if window_id == window.id() => {
-            self.after_run();
-            elwt.exit()
-          },
-          WindowEvent::RedrawRequested if window_id == window.id() => {
-            let now = std::time::Instant::now();
-            let duration = now - last_time;
-            let delta_time = duration.as_secs_f64();
-            last_time = std::time::Instant::now();
-            let window_size = window.inner_size();
-            match self.update(delta_time, window_size.width, window_size.height) {
-              Ok(_) => {
-                match self.render() {
-                  Ok(_) => (),
-                  Err(e) => {
-                    log::error!("Failed to render the application: {}", e);
-                    elwt.exit()
-                  },
-                }
-              },
+    self.last_time = std::time::Instant::now();
+  }
+
+  /// Emitted when the OS sends an event to a winit window.
+  /// param event_loop: The event loop that the application is running on.
+  /// param id: The ID of the window that the event was sent to.
+  /// param event: The event that was sent to the window.
+  fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    let window = self.window.as_ref().unwrap();
+
+    match event {
+      WindowEvent::CloseRequested if window_id == window.id() => {
+        self.context.after_run();
+        event_loop.exit()
+      },
+      WindowEvent::RedrawRequested if window_id == window.id() => {
+        let now = std::time::Instant::now();
+        let duration = now - self.last_time;
+        let delta_time = duration.as_secs_f64();
+        self.last_time = std::time::Instant::now();
+        let window_size = window.inner_size();
+        match self.context.update(delta_time, window_size.width, window_size.height) {
+          Ok(_) => {
+            match self.context.render() {
+              Ok(_) => (),
               Err(e) => {
-                log::error!("Failed to update the application: {}", e);
-                elwt.exit()
+                log::error!("Failed to render the application: {}", e);
+                event_loop.exit()
               },
             }
           },
-          WindowEvent::ModifiersChanged(mods) if window_id == window.id() => {
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              imgui.add_key_event(imgui::Key::ModCtrl, mods.state().control_key());
-              imgui.add_key_event(imgui::Key::ModShift, mods.state().shift_key());
-              imgui.add_key_event(imgui::Key::ModAlt, mods.state().alt_key());
-              imgui.add_key_event(imgui::Key::ModSuper, mods.state().super_key());
-            }
+          Err(e) => {
+            log::error!("Failed to update the application: {}", e);
+            event_loop.exit()
           },
-          WindowEvent::KeyboardInput {
-            event: winit::event::KeyEvent {
-              physical_key,
-              text,
-              state,
-              ..
-            },
-            is_synthetic: false,
-            ..
-          } => {
-            let mut is_ui_processed = false;
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              let is_pressed = state == winit::event::ElementState::Pressed;
-              if let Some(key) = HalaImGui::to_key(physical_key) {
-                imgui.add_key_event(key, is_pressed);
+        }
+      },
+      WindowEvent::ModifiersChanged(mods) if window_id == window.id() => {
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          imgui.add_key_event(imgui::Key::ModCtrl, mods.state().control_key());
+          imgui.add_key_event(imgui::Key::ModShift, mods.state().shift_key());
+          imgui.add_key_event(imgui::Key::ModAlt, mods.state().alt_key());
+          imgui.add_key_event(imgui::Key::ModSuper, mods.state().super_key());
+        }
+      },
+      WindowEvent::KeyboardInput {
+        event: winit::event::KeyEvent {
+          physical_key,
+          text,
+          state,
+          ..
+        },
+        is_synthetic: false,
+        ..
+      } => {
+        let mut is_ui_processed = false;
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          let is_pressed = state == winit::event::ElementState::Pressed;
+          if let Some(key) = HalaImGui::to_key(physical_key) {
+            imgui.add_key_event(key, is_pressed);
 
-                if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
-                  let kmod = match keycode {
-                    winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => Some(imgui::Key::ModCtrl),
-                    winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => Some(imgui::Key::ModShift),
-                    winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => Some(imgui::Key::ModAlt),
-                    winit::keyboard::KeyCode::SuperLeft | winit::keyboard::KeyCode::SuperRight => Some(imgui::Key::ModSuper),
-                    _ => None,
-                  };
-                  if let Some(kmod) = kmod {
-                    imgui.add_key_event(kmod, is_pressed);
-                  }
-                }
-              }
-              if is_pressed {
-                if let Some(text) = text {
-                  for c in text.chars() {
-                    imgui.add_input_character(c as u32);
-                  }
-                }
-              }
-              is_ui_processed = imgui.want_capture_keyboard();
-            }
-            if !is_ui_processed {
-              if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
-                match self.on_keyboard_event(keycode, state == winit::event::ElementState::Pressed) {
-                  Ok(_) => (),
-                  Err(e) => {
-                    log::error!("Failed to handle keyboard event: {}", e);
-                    elwt.exit()
-                  },
-                }
+            if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
+              let kmod = match keycode {
+                winit::keyboard::KeyCode::ControlLeft | winit::keyboard::KeyCode::ControlRight => Some(imgui::Key::ModCtrl),
+                winit::keyboard::KeyCode::ShiftLeft | winit::keyboard::KeyCode::ShiftRight => Some(imgui::Key::ModShift),
+                winit::keyboard::KeyCode::AltLeft | winit::keyboard::KeyCode::AltRight => Some(imgui::Key::ModAlt),
+                winit::keyboard::KeyCode::SuperLeft | winit::keyboard::KeyCode::SuperRight => Some(imgui::Key::ModSuper),
+                _ => None,
+              };
+              if let Some(kmod) = kmod {
+                imgui.add_key_event(kmod, is_pressed);
               }
             }
-          },
-          WindowEvent::Ime(Ime::Commit(text)) => {
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
+          }
+          if is_pressed {
+            if let Some(text) = text {
               for c in text.chars() {
                 imgui.add_input_character(c as u32);
               }
             }
-          },
-          WindowEvent::CursorMoved {
-            position,
-            ..
-          } => {
-            let mut is_ui_processed = false;
-            let mut x: f32 = 0.0;
-            let mut y: f32 = 0.0;
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              let scale = window.scale_factor();
-              let position = position.to_logical::<f32>(scale);
-              x = position.x;
-              y = position.y;
-              imgui.add_mouse_pos_event(x, y);
-              is_ui_processed = imgui.want_capture_mouse();
+          }
+          is_ui_processed = imgui.want_capture_keyboard();
+        }
+        if !is_ui_processed {
+          if let winit::keyboard::PhysicalKey::Code(keycode) = physical_key {
+            match self.context.on_keyboard_event(keycode, state == winit::event::ElementState::Pressed) {
+              Ok(_) => (),
+              Err(e) => {
+                log::error!("Failed to handle keyboard event: {}", e);
+                event_loop.exit()
+              },
             }
-            if !is_ui_processed {
-              match self.on_mouse_cursor_event(x, y) {
-                Ok(_) => (),
-                Err(e) => {
-                  log::error!("Failed to handle mouse move event: {}", e);
-                  elwt.exit()
-                },
-              }
-            }
-          },
-          WindowEvent::CursorLeft { .. } => {
-            let mut is_ui_processed = false;
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              imgui.add_mouse_pos_event(f32::MAX, f32::MAX);
-              is_ui_processed = imgui.want_capture_mouse();
-            }
-            if !is_ui_processed {
-              match self.on_mouse_cursor_event(f32::MAX, f32::MAX) {
-                Ok(_) => (),
-                Err(e) => {
-                  log::error!("Failed to handle mouse move event: {}", e);
-                  elwt.exit()
-                },
-              }
-            }
-          },
-          WindowEvent::MouseInput {
-            state,
-            button,
-            ..
-          } => {
-            let mut is_ui_processed = false;
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              if let Some(button) = HalaImGui::to_button(button) {
-                let is_pressed = state == winit::event::ElementState::Pressed;
-                imgui.add_mouse_button_event(button, is_pressed);
-                is_ui_processed = imgui.want_capture_mouse();
-              }
-            }
-            if !is_ui_processed {
-              match self.on_mouse_button_event(button, state == winit::event::ElementState::Pressed) {
-                Ok(_) => (),
-                Err(e) => {
-                  log::error!("Failed to handle mouse button event: {}", e);
-                  elwt.exit()
-                },
-              }
-            }
-          },
-          WindowEvent::MouseWheel {
-            delta,
-            phase: winit::event::TouchPhase::Moved,
-            ..
-          } => {
-            let mut is_ui_processed = false;
-            let mut h: f32 = 0.0;
-            let mut v: f32 = 0.0;
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              (h, v) = match delta {
-                winit::event::MouseScrollDelta::LineDelta(h, v) => (h, v),
-                winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                  let scale = imgui.get_display_framebuffer_scale();
-                  let f_scale = imgui.get_font_size();
-                  let scale = scale[0] * f_scale;
-                  (pos.x as f32 / scale, pos.y as f32 / scale)
-                },
-              };
-              imgui.add_mouse_wheel_event(h, v);
-              is_ui_processed = imgui.want_capture_mouse();
-            }
-            if !is_ui_processed {
-              match self.on_mouse_wheel_event(h, v) {
-                Ok(_) => (),
-                Err(e) => {
-                  log::error!("Failed to handle mouse wheel event: {}", e);
-                  elwt.exit()
-                },
-              }
-            }
-          },
-          WindowEvent::Focused(is_focused) => {
-            let imgui = self.get_imgui_mut();
-            if let Some(imgui) = imgui {
-              imgui.add_focus_event(is_focused);
-            }
-          },
-          _ => (),
-        },
-        _ => (),
-      }
-    })?;
+          }
+        }
+      },
+      WindowEvent::Ime(Ime::Commit(text)) => {
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          for c in text.chars() {
+            imgui.add_input_character(c as u32);
+          }
+        }
+      },
+      WindowEvent::CursorMoved {
+        position,
+        ..
+      } => {
+        let mut is_ui_processed = false;
+        let mut x: f32 = 0.0;
+        let mut y: f32 = 0.0;
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          let scale = window.scale_factor();
+          let position = position.to_logical::<f32>(scale);
+          x = position.x;
+          y = position.y;
+          imgui.add_mouse_pos_event(x, y);
+          is_ui_processed = imgui.want_capture_mouse();
+        }
+        if !is_ui_processed {
+          match self.context.on_mouse_cursor_event(x, y) {
+            Ok(_) => (),
+            Err(e) => {
+              log::error!("Failed to handle mouse move event: {}", e);
+              event_loop.exit()
+            },
+          }
+        }
+      },
+      WindowEvent::CursorLeft { .. } => {
+        let mut is_ui_processed = false;
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          imgui.add_mouse_pos_event(f32::MAX, f32::MAX);
+          is_ui_processed = imgui.want_capture_mouse();
+        }
+        if !is_ui_processed {
+          match self.context.on_mouse_cursor_event(f32::MAX, f32::MAX) {
+            Ok(_) => (),
+            Err(e) => {
+              log::error!("Failed to handle mouse move event: {}", e);
+              event_loop.exit()
+            },
+          }
+        }
+      },
+      WindowEvent::MouseInput {
+        state,
+        button,
+        ..
+      } => {
+        let mut is_ui_processed = false;
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          if let Some(button) = HalaImGui::to_button(button) {
+            let is_pressed = state == winit::event::ElementState::Pressed;
+            imgui.add_mouse_button_event(button, is_pressed);
+            is_ui_processed = imgui.want_capture_mouse();
+          }
+        }
+        if !is_ui_processed {
+          match self.context.on_mouse_button_event(button, state == winit::event::ElementState::Pressed) {
+            Ok(_) => (),
+            Err(e) => {
+              log::error!("Failed to handle mouse button event: {}", e);
+              event_loop.exit()
+            },
+          }
+        }
+      },
+      WindowEvent::MouseWheel {
+        delta,
+        phase: winit::event::TouchPhase::Moved,
+        ..
+      } => {
+        let mut is_ui_processed = false;
+        let mut h: f32 = 0.0;
+        let mut v: f32 = 0.0;
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          (h, v) = match delta {
+            winit::event::MouseScrollDelta::LineDelta(h, v) => (h, v),
+            winit::event::MouseScrollDelta::PixelDelta(pos) => {
+              let scale = imgui.get_display_framebuffer_scale();
+              let f_scale = imgui.get_font_size();
+              let scale = scale[0] * f_scale;
+              (pos.x as f32 / scale, pos.y as f32 / scale)
+            },
+          };
+          imgui.add_mouse_wheel_event(h, v);
+          is_ui_processed = imgui.want_capture_mouse();
+        }
+        if !is_ui_processed {
+          match self.context.on_mouse_wheel_event(h, v) {
+            Ok(_) => (),
+            Err(e) => {
+              log::error!("Failed to handle mouse wheel event: {}", e);
+              event_loop.exit()
+            },
+          }
+        }
+      },
+      WindowEvent::Focused(is_focused) => {
+        let imgui = self.context.get_imgui_mut();
+        if let Some(imgui) = imgui {
+          imgui.add_focus_event(is_focused);
+        }
+      },
+      _ => (),
+    }
+  }
+
+}
+
+/// Implement the HalaApplication struct.
+impl HalaApplication {
+
+  /// Create a new HalaApplication instance.
+  pub fn new(context: Box<dyn HalaApplicationContextTrait>) -> Self {
+    Self {
+      context,
+      window: None,
+      last_time: std::time::Instant::now(),
+    }
+  }
+
+  /// Run the application.
+  pub fn run(&mut self) -> Result<()> {
+    let event_loop = EventLoop::new()?;
+    event_loop.set_control_flow(ControlFlow::Poll);
+
+    event_loop.run_app(self)?;
 
     Ok(())
   }
