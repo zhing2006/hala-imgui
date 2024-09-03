@@ -155,10 +155,10 @@ pub struct HalaApplication {
 impl ApplicationHandler for HalaApplication {
 
   /// Emitted when the event loop is about to block and wait for new events.
-  fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-    let window = self.window.as_ref().unwrap();
-    window.request_redraw();
-  }
+  // fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+  //   let window = self.window.as_ref().unwrap();
+  //   window.request_redraw();
+  // }
 
   /// Emitted when the application has been resumed.
   /// param event_loop: The event loop that the application is running on.
@@ -201,7 +201,7 @@ impl ApplicationHandler for HalaApplication {
         match self.context.update(delta_time, window_size.width, window_size.height) {
           Ok(_) => {
             match self.context.render() {
-              Ok(_) => (),
+              Ok(_) => window.request_redraw(),
               Err(e) => {
                 log::error!("Failed to render the application: {}", e);
                 event_loop.exit()
