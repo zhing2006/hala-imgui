@@ -816,7 +816,7 @@ impl HalaImGui {
 
     let font_command_buffers = hala_gfx::HalaCommandBufferSet::new(
       Rc::clone(&context.logical_device),
-      Rc::clone(&context.pools),
+      Rc::clone(&context.command_pools),
       hala_gfx::HalaCommandBufferType::GRAPHICS,
       hala_gfx::HalaCommandBufferLevel::PRIMARY,
       1,
