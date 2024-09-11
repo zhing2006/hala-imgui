@@ -12,8 +12,8 @@ use hala_imgui::{
 
 /// The hello world renderer.
 struct HelloWorldRenderer {
-  context: std::mem::ManuallyDrop<Rc<RefCell<hala_gfx::HalaContext>>>,
-  graphics_command_buffers: std::mem::ManuallyDrop<hala_gfx::HalaCommandBufferSet>,
+  graphics_command_buffers: hala_gfx::HalaCommandBufferSet,
+  context: Rc<RefCell<hala_gfx::HalaContext>>,
 
   image_index: usize,
 }
@@ -23,10 +23,6 @@ impl Drop for HelloWorldRenderer {
 
   /// Drop the hello world renderer.
   fn drop(&mut self) {
-    unsafe {
-      std::mem::ManuallyDrop::drop(&mut self.graphics_command_buffers);
-      std::mem::ManuallyDrop::drop(&mut self.context);
-    }
     log::debug!("Hello World renderer dropped.");
   }
 
@@ -52,8 +48,8 @@ impl HelloWorldRenderer {
     log::debug!("Hello World renderer created.");
     Ok(
       Self {
-        context: std::mem::ManuallyDrop::new(Rc::new(RefCell::new(context))),
-        graphics_command_buffers: std::mem::ManuallyDrop::new(graphics_command_buffers),
+        context: Rc::new(RefCell::new(context)),
+        graphics_command_buffers: graphics_command_buffers,
 
         image_index: 0,
       }

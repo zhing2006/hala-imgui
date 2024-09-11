@@ -115,22 +115,25 @@ const __GLSL_SHADER_FRAG_SPV: [u32; 193] = [
 
 /// The ImGUI context.
 pub struct HalaImGui {
-  pub(crate) vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>,
+  #[allow(dead_code)]
+  vert_shader: hala_gfx::HalaShader,
+  #[allow(dead_code)]
+  frag_shader: hala_gfx::HalaShader,
 
-  vert_shader: std::mem::ManuallyDrop<hala_gfx::HalaShader>,
-  frag_shader: std::mem::ManuallyDrop<hala_gfx::HalaShader>,
+  font_sampler: hala_gfx::HalaSampler,
+  font_descriptor_set: hala_gfx::HalaDescriptorSet,
+  #[allow(dead_code)]
+  font_descriptor_pool: Rc<RefCell<hala_gfx::HalaDescriptorPool>>,
 
-  font_sampler: std::mem::ManuallyDrop<hala_gfx::HalaSampler>,
-  font_descriptor_pool: std::mem::ManuallyDrop<Rc<RefCell<hala_gfx::HalaDescriptorPool>>>,
-  font_descriptor_set: std::mem::ManuallyDrop<hala_gfx::HalaDescriptorSet>,
-
-  pipeline: std::mem::ManuallyDrop<hala_gfx::HalaGraphicsPipeline>,
+  pipeline: hala_gfx::HalaGraphicsPipeline,
 
   font_image: Option<hala_gfx::HalaImage>,
   vertex_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
   index_buffers: Vec<Option<hala_gfx::HalaBuffer>>,
 
-  imgui: std::mem::ManuallyDrop<imgui::Context>,
+  imgui: imgui::Context,
+
+  pub(crate) vk_ctx: Rc<RefCell<hala_gfx::HalaContext>>,
 }
 
 /// The implementation of the drop trait for the ImGUI context.
@@ -140,15 +143,6 @@ impl Drop for HalaImGui {
   fn drop(&mut self) {
     self.font_image = None;
 
-    unsafe {
-      std::mem::ManuallyDrop::drop(&mut self.imgui);
-      std::mem::ManuallyDrop::drop(&mut self.pipeline);
-      std::mem::ManuallyDrop::drop(&mut self.font_descriptor_set);
-      std::mem::ManuallyDrop::drop(&mut self.font_descriptor_pool);
-      std::mem::ManuallyDrop::drop(&mut self.font_sampler);
-      std::mem::ManuallyDrop::drop(&mut self.vert_shader);
-      std::mem::ManuallyDrop::drop(&mut self.frag_shader);
-    }
     log::debug!("ImGUI context dropped.");
   }
 
@@ -430,12 +424,12 @@ impl HalaImGui {
       )?;
 
       (
-        std::mem::ManuallyDrop::new(vert_shader),
-        std::mem::ManuallyDrop::new(frag_shader),
-        std::mem::ManuallyDrop::new(font_descriptor_pool),
-        std::mem::ManuallyDrop::new(font_descriptor_set),
-        std::mem::ManuallyDrop::new(font_sampler),
-        std::mem::ManuallyDrop::new(pipeline),
+        vert_shader,
+        frag_shader,
+        font_descriptor_pool,
+        font_descriptor_set,
+        font_sampler,
+        pipeline,
         context.swapchain.num_of_images,
       )
     };
@@ -465,7 +459,7 @@ impl HalaImGui {
       font_image: None,
       vertex_buffers,
       index_buffers,
-      imgui: std::mem::ManuallyDrop::new(imgui),
+      imgui,
     })
   }
 
@@ -690,7 +684,7 @@ impl HalaImGui {
                 index,
                 &self.pipeline,
                 0,
-                &[&(*self.font_descriptor_set)],
+                &[&self.font_descriptor_set],
                 &[],
               );
 
@@ -843,7 +837,7 @@ impl HalaImGui {
       0,
       0,
       &[
-        (&font_image, &(*self.font_sampler)),
+        (&font_image, &self.font_sampler),
       ],
     );
 
